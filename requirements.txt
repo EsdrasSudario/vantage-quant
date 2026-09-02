@@ -1,0 +1,20 @@
+# Vantage Quant System — dependencias completas
+# pip install -r requirements.txt
+
+# Core
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.11.0
+python-dotenv>=1.0.0
+
+# Quant models
+arch>=6.0.0          # GARCH(1,1)
+pykalman>=0.9.5      # Kalman Filter
+scikit-learn>=1.3.0  # ML utilities
+statsmodels>=0.14.0  # dependencia do arch
+
+# MT5 (Windows apenas — comentar se rodar em Linux/Mac)
+MetaTrader5>=5.0.45
+
+# Requests (news feed futuro)
+requests>=2.31.0

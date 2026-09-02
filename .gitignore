@@ -1,0 +1,30 @@
+# Arquivos sensiveis — NUNCA enviar ao git
+config/.env
+*.env
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Logs e outputs de backtest
+logs/
+*.log
+*.csv
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
