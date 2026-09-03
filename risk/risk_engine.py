@@ -4,10 +4,10 @@ risk/risk_engine.py
 Risk Engine em tempo real para Vantage Quant System.
 
 Controles implementados:
-  1. Circuit Breaker Global     — PnL diário < -2% NAV → halt total
-  2. Stop por posição           — perda individual > -1.5% → fecha posição
+  1. Circuit Breaker Global     — PnL diário < -2% NAV -> halt total
+  2. Stop por posição           — perda individual > -1.5% -> fecha posição
   3. VaR histórico 95% rolling  — limite de exposure total
-  4. Geo Circuit Breaker        — GeoScore > 0.85 → leverage 25%
+  4. Geo Circuit Breaker        — GeoScore > 0.85 -> leverage 25%
   5. Correlation Filter         — bloqueia se intra-portfolio corr > 0.70
   6. Slippage Monitor           — alerta se avg slippage > 2 pips
   7. Max simultaneous positions — limite de posições abertas
@@ -35,7 +35,7 @@ class RiskLimits:
     max_daily_loss_pct:   float = 0.020   # 2% do NAV
     max_position_loss_pct: float = 0.015  # 1.5% por posição
     var_95_limit_pct:     float = 0.015   # VaR 95% máximo
-    geo_score_threshold:  float = 0.850   # acima → reduz leverage
+    geo_score_threshold:  float = 0.850   # acima -> reduz leverage
     geo_leverage_scalar:  float = 0.250   # 25% do tamanho normal
     max_corr:             float = 0.700   # correlação máxima intra-portfolio
     max_slippage_pips:    float = 2.000   # alerta de slippage
@@ -111,7 +111,7 @@ class RiskEngine:
         # 3. Geo Circuit Breaker
         if geo_score > self.limits.geo_score_threshold:
             scalar *= self.limits.geo_leverage_scalar
-            alerts.append(f"GeoScore={geo_score:.3f} > {self.limits.geo_score_threshold} → leverage 25%")
+            alerts.append(f"GeoScore={geo_score:.3f} > {self.limits.geo_score_threshold} -> leverage 25%")
             log.warning(f"Geo risk: scalar reduzido para {scalar:.2f}")
 
         # 4. VaR histórico
@@ -119,14 +119,14 @@ class RiskEngine:
             var_breach, var_val = self._check_var(prices_df)
             if var_breach:
                 scalar *= 0.5
-                alerts.append(f"VaR 95% = {var_val*100:.2f}% > limite → size reduzido 50%")
+                alerts.append(f"VaR 95% = {var_val*100:.2f}% > limite -> size reduzido 50%")
 
         # 5. Correlation Filter
         if prices_df is not None and len(self.positions) > 0:
             high_corr = self._check_correlation(symbol, prices_df)
             if high_corr:
                 scalar *= 0.5
-                alerts.append(f"Alta correlação com posição existente → size reduzido 50%")
+                alerts.append(f"Alta correlação com posição existente -> size reduzido 50%")
 
         # 6. Confidence scaling
         scalar *= max(signal_conf, 0.3)   # mínimo 30% do size se baixa confiança
@@ -136,7 +136,7 @@ class RiskEngine:
             alerts.append(f"Avg slippage {self._avg_slippage():.1f} pips > {self.limits.max_slippage_pips} pips")
 
         adjusted = round(max(base_size * scalar, 0.01), 2)
-        reason   = f"Aprovado | scalar={scalar:.3f} | size={base_size:.2f}→{adjusted:.2f} lotes"
+        reason   = f"Aprovado | scalar={scalar:.3f} | size={base_size:.2f}->{adjusted:.2f} lotes"
         if alerts:
             reason += " | ALERTAS: " + "; ".join(alerts)
 
@@ -150,6 +150,12 @@ class RiskEngine:
         self.positions[pos.symbol] = pos
         log.info(f"OPEN {pos.symbol} {pos.direction} {pos.volume}L @ {pos.entry_price}")
 
+    # Pip sizes por símbolo (mantido em sync com order_manager._PIP_SIZE)
+    _PIP = {"USDJPY": 0.01, "USDJPY+": 0.01, "EURJPY": 0.01, "EURJPY+": 0.01,
+            "GBPJPY": 0.01, "GBPJPY+": 0.01, "AUDJPY": 0.01, "AUDJPY+": 0.01,
+            "NZDJPY": 0.01, "NZDJPY+": 0.01, "CADJPY": 0.01, "CADJPY+": 0.01,
+            "XAUUSD": 0.10, "XAUUSD+": 0.10}
+
     def update_position_pnl(self, symbol: str, current_price: float,
                             pip_value: float = 10.0) -> Optional[str]:
         """Atualiza PnL e verifica stop por posição. Retorna 'CLOSE' se stop atingido."""
@@ -157,7 +163,8 @@ class RiskEngine:
         if not pos:
             return None
 
-        pip_diff = (current_price - pos.entry_price) * 10_000
+        pip_size = self._PIP.get(symbol, 0.0001)
+        pip_diff = (current_price - pos.entry_price) / pip_size
         if pos.direction == "SELL":
             pip_diff = -pip_diff
 
@@ -174,7 +181,8 @@ class RiskEngine:
         pos = self.positions.pop(symbol, None)
         if not pos:
             return 0.0
-        pip_diff = (exit_price - pos.entry_price) * 10_000
+        pip_size = self._PIP.get(pos.symbol, 0.0001)
+        pip_diff = (exit_price - pos.entry_price) / pip_size
         if pos.direction == "SELL":
             pip_diff = -pip_diff
         pnl = pip_diff * pos.volume * pip_value

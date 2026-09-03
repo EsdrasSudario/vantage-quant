@@ -158,7 +158,7 @@ class OrderManager:
         comm   = self.kelly.commission(volume)
 
         log.info(f"Kelly size: prob={win_prob:.2f} R={win_loss_ratio:.2f} "
-                 f"scalar={size_scalar:.3f} → {volume}L | comm=${comm}")
+                 f"scalar={size_scalar:.3f} -> {volume}L | comm=${comm}")
 
         # 2. Risk Engine pre-trade
         if self.risk_engine:
@@ -225,7 +225,7 @@ class OrderManager:
                                0, comm, error_msg=err)
 
         filled   = result.price
-        slip     = round(abs(filled - price) * 10_000, 2)
+        slip     = round(abs(filled - price) / _pip(symbol), 2)
         log.info(f"FILL {symbol} {direction} {volume}L @ {filled} | slip={slip}p | ticket={result.order}")
 
         res = OrderResult(

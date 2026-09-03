@@ -174,7 +174,7 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
     while iteration < max_iterations:
         iteration += 1
         ts = datetime.utcnow()
-        log.info(f"\n{'─'*50}")
+        log.info(f"\n{'-'*50}")
         log.info(f"  Iteração {iteration}/{max_iterations} — {ts.strftime('%H:%M:%S UTC')}")
 
         headlines = get_geo_headlines()
@@ -226,15 +226,25 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                             "volume":    res.volume,
                             "entry":     res.filled_price,
                         }
-                        risk.open_position_from_result = res
+                        # B2 fix: registra posição no RiskEngine para circuit
+                        # breaker, max_positions e position-stop funcionarem
+                        from risk.risk_engine import Position
+                        risk.open_position(Position(
+                            symbol=sym,
+                            direction=pkt.direction,
+                            volume=res.volume,
+                            entry_price=res.filled_price,
+                        ))
+                        risk.record_fill_slippage(res.requested_price,
+                                                  res.filled_price)
                         log.info(
-                            f"  ✅ ORDEM {sym} {pkt.direction} "
+                            f"  [OK] ORDEM {sym} {pkt.direction} "
                             f"{res.volume:.2f}L @ {res.filled_price:.5f} "
                             f"slip={res.slippage_pips:.1f}p "
                             f"comm=${res.commission:.2f}"
                         )
                     else:
-                        log.warning(f"  ❌ Ordem rejeitada: {res.error_msg}")
+                        log.warning(f"  [REJEITADA] Ordem {sym}: {res.error_msg}")
 
             except Exception as e:
                 log.error(f"  Erro em {sym}: {e}", exc_info=True)
@@ -253,7 +263,7 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
             oms.trade_log()
 
         # Aguardar próximo ciclo
-        log.info(f"  ⏳ Aguardando {interval_sec}s...")
+        log.info(f"  [WAIT] Aguardando {interval_sec}s...")
         time.sleep(interval_sec)
 
     # Relatório final
