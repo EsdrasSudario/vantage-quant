@@ -27,6 +27,18 @@ import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Fix encoding Windows CP1252 — suporte a caracteres Unicode no terminal
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -263,7 +275,7 @@ if __name__ == "__main__":
                         help="Símbolos a operar")
     parser.add_argument("--interval",  type=int, default=60,
                         help="Intervalo entre ciclos em segundos")
-    parser.add_argument("--max-iter",  type=int, default=100,
+    parser.add_argument("--max-iter",  type=int, default=0,
                         help="Número máximo de iterações (0 = infinito)")
     args = parser.parse_args()
 

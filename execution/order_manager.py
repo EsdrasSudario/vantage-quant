@@ -23,6 +23,34 @@ from typing import Optional, List
 from datetime import datetime
 
 log = logging.getLogger("OMS")
+
+# ── Pip size por símbolo ──────────────────────────────────────────────────────
+# Pares JPY: 1 pip = 0.01 | XAU: 1 pip = 0.10 | demais: 1 pip = 0.0001
+_PIP_SIZE = {
+    "USDJPY": 0.01,  "USDJPY+": 0.01,
+    "EURJPY": 0.01,  "EURJPY+": 0.01,
+    "GBPJPY": 0.01,  "GBPJPY+": 0.01,
+    "AUDJPY": 0.01,  "AUDJPY+": 0.01,
+    "NZDJPY": 0.01,  "NZDJPY+": 0.01,
+    "CADJPY": 0.01,  "CADJPY+": 0.01,
+    "CHFJPY": 0.01,  "CHFJPY+": 0.01,
+    "XAUUSD": 0.10,  "XAUUSD+": 0.10,
+}
+_DEFAULT_PIP = 0.0001
+
+def _pip(symbol: str) -> float:
+    """Retorna o tamanho de 1 pip para o símbolo."""
+    return _PIP_SIZE.get(symbol.upper(), _DEFAULT_PIP)
+
+# ── Comissão por tipo de conta (round turn) ──────────────────────────────────
+_COMMISSION_ROUND_TURN = {
+    "RAW_ECN":      6.00,   # $3.00/lado × 2
+    "PRO_ECN":      3.00,   # $1.50/lado × 2
+    "STANDARD_STP": 0.00,   # sem comissão (spread embutido)
+    "CENT":         0.06,   # $0.03/lado × 2 (lotes centavos)
+}
+_ACCOUNT_TYPE = os.getenv("ACCOUNT_TYPE", "RAW_ECN").upper()
+_COMMISSION_RATE = _COMMISSION_ROUND_TURN.get(_ACCOUNT_TYPE, 6.00)
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [OMS] %(levelname)s %(message)s")
 
@@ -45,7 +73,7 @@ class OrderResult:
     filled_price:  float
     slippage_pips: float
     ticket:        int
-    commission:    float       # RAW ECN: $1.50/lote
+    commission:    float       # RAW ECN: $6.00/lote round turn
     timestamp:     datetime = field(default_factory=datetime.utcnow)
     error_msg:     str = ""
 
@@ -83,9 +111,17 @@ class KellySizer:
         return lots
 
     @staticmethod
-    def commission(volume: float, rate_per_lot: float = 1.50) -> float:
-        """RAW ECN: $1.50 por lote (half-turn)."""
-        return round(volume * rate_per_lot, 4)
+    def commission(volume: float, rate_per_lot: float = None) -> float:
+        """
+        Comissão round turn por lote:
+          RAW ECN:      $6.00/lot  (padrão)
+          PRO ECN:      $3.00/lot
+          STANDARD STP: $0.00/lot
+          CENT:         $0.06/lot
+        Lê ACCOUNT_TYPE do ambiente via _COMMISSION_RATE global.
+        """
+        rate = rate_per_lot if rate_per_lot is not None else _COMMISSION_RATE
+        return round(volume * rate, 4)
 
 
 class OrderManager:
@@ -152,15 +188,17 @@ class OrderManager:
             return OrderResult(False, symbol, direction, volume, 0, 0, 0, 0,
                                comm, error_msg=f"Tick não disponível para {symbol}")
 
+        pip_size = _pip(symbol)
+
         if direction == "BUY":
             price    = tick.ask
-            sl       = round(price - sl_pips * 0.0001, 5)
-            tp       = round(price + tp_pips * 0.0001, 5)
+            sl       = round(price - sl_pips * pip_size, 5)
+            tp       = round(price + tp_pips * pip_size, 5)
             order_tp = mt5.ORDER_TYPE_BUY
         else:
             price    = tick.bid
-            sl       = round(price + sl_pips * 0.0001, 5)
-            tp       = round(price - tp_pips * 0.0001, 5)
+            sl       = round(price + sl_pips * pip_size, 5)
+            tp       = round(price - tp_pips * pip_size, 5)
             order_tp = mt5.ORDER_TYPE_SELL
 
         request = {
@@ -231,9 +269,59 @@ class OrderManager:
     # ------------------------------------------------------------------
     def close_position(self, symbol: str, direction: str,
                        volume: float) -> OrderResult:
-        """Fecha posição aberta (direção oposta)."""
+        """Fecha posição aberta via ticket real (MT5) ou simulação."""
+        if self.mt5_connected:
+            return self._close_mt5_position(symbol, direction, volume)
+        # Modo simulação
         close_dir = "SELL" if direction == "BUY" else "BUY"
-        return self.execute(symbol, close_dir, 0.5, 1.0, 0.0, 1.0)
+        comm = self.kelly.commission(volume)
+        return self._simulate_order(symbol, close_dir, volume, 0, 0, comm)
+
+    def _close_mt5_position(self, symbol: str, direction: str,
+                             volume: float) -> OrderResult:
+        """Fecha posição pelo ticket exato — evita fechar a posição errada."""
+        positions = mt5.positions_get(symbol=symbol)
+        if not positions:
+            return OrderResult(False, symbol, direction, volume, 0, 0, 0, 0, 0,
+                               error_msg=f"Nenhuma posição aberta em {symbol}")
+
+        pos = positions[0]
+        close_type = (mt5.ORDER_TYPE_SELL
+                      if pos.type == mt5.POSITION_TYPE_BUY
+                      else mt5.ORDER_TYPE_BUY)
+        tick = mt5.symbol_info_tick(symbol)
+        price = tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask
+
+        request = {
+            "action":       mt5.TRADE_ACTION_DEAL,
+            "symbol":       symbol,
+            "volume":       pos.volume,
+            "type":         close_type,
+            "position":     pos.ticket,
+            "price":        price,
+            "deviation":    10,
+            "magic":        20260831,
+            "comment":      "close_vantage_quant",
+            "type_time":    mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            err = result.comment if result else "Sem resposta"
+            log.error(f"Close falhou: {err}")
+            return OrderResult(False, symbol, direction, pos.volume, price,
+                               0, 0, 0, self.kelly.commission(pos.volume),
+                               error_msg=err)
+
+        comm = self.kelly.commission(pos.volume)
+        log.info(f"CLOSE {symbol} ticket={pos.ticket} @ {result.price} | comm=${comm}")
+        return OrderResult(
+            success=True, symbol=symbol, direction="CLOSE",
+            volume=pos.volume, requested_price=price,
+            filled_price=result.price,
+            slippage_pips=round(abs(result.price - price) * 10_000 / _pip(symbol) * _DEFAULT_PIP, 2),
+            ticket=result.order, commission=comm
+        )
 
     # ------------------------------------------------------------------
     # REPORTS
