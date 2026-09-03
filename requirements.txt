@@ -16,5 +16,6 @@ statsmodels>=0.14.0  # dependencia do arch
 # MT5 (Windows apenas — comentar se rodar em Linux/Mac)
 MetaTrader5>=5.0.45
 
-# Requests (news feed futuro)
+# Requests e RSS (GeoScore com headlines reais)
 requests>=2.31.0
+feedparser>=6.0.10

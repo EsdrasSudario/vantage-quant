@@ -117,18 +117,43 @@ def get_current_price(symbol: str) -> float:
     return float(prices.iloc[-1])
 
 
-def get_geo_headlines() -> list:
-    """
-    Em produção: integrar com Reuters/Bloomberg API ou web scraping.
-    Por ora retorna headlines fixas representativas do cenário ago/2026.
-    """
-    return [
-        "Fed holds rates amid inflation uncertainty",
-        "BoJ signals possible rate hike in Q3",
-        "Iran tensions in Persian Gulf ease slightly",
-        "EUR/USD rises on German fiscal expansion",
-        "Oil prices volatile on Hormuz concerns",
-    ]
+_GEO_RSS_FEEDS = [
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://feeds.bbci.co.uk/news/business/rss.xml",
+    "https://rss.ft.com/rss/time/sections/96da3bc2-eeb4-4a87-a790-e5e7e6b84a51",
+]
+
+_FALLBACK_HEADLINES = [
+    "Market conditions normal — no geopolitical alerts",
+]
+
+def get_geo_headlines(max_items: int = 20) -> list:
+    """Busca headlines reais via RSS. Fallback para lista fixa se offline."""
+    try:
+        import feedparser
+    except ImportError:
+        log.warning("feedparser nao instalado — usando headlines fallback. "
+                    "Execute: pip install feedparser")
+        return _FALLBACK_HEADLINES
+
+    headlines = []
+    per_feed  = max(1, max_items // len(_GEO_RSS_FEEDS))
+    for url in _GEO_RSS_FEEDS:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:per_feed]:
+                title = getattr(entry, "title", "").strip()
+                if title:
+                    headlines.append(title)
+        except Exception as exc:
+            log.debug(f"RSS falhou ({url}): {exc}")
+
+    if headlines:
+        log.debug(f"GeoScore: {len(headlines)} headlines carregadas via RSS")
+        return headlines
+
+    log.warning("Todos os RSS falharam — usando headlines fallback")
+    return _FALLBACK_HEADLINES
 
 
 # ======================================================================
