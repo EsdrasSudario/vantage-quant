@@ -4,7 +4,7 @@ backtest/engine.py
 Backtesting Engine para Vantage Quant System.
 
 Características:
-  - Custos reais RAW ECN: spread 0.0 pip + $1.50/lote comissão
+  - Custos reais configuráveis via ACCOUNT_TYPE (.env): RAW ECN $6.00/lote, PRO ECN $3.00/lote
   - Integra SignalAggregator (GARCH + Kalman + GeoScore)
   - Kelly fracionário com cap 2%
   - Risk Engine com circuit breaker
@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 import warnings
 warnings.filterwarnings("ignore")
+
+from core.costs import get_commission_per_lot
 
 
 @dataclass
@@ -67,7 +69,7 @@ class BacktestResults:
 
 class Backtester:
 
-    COMMISSION_PER_LOT = 1.50    # RAW ECN Vantage (half-turn)
+    COMMISSION_PER_LOT = get_commission_per_lot()   # lê ACCOUNT_TYPE do .env
     PIP_VALUE_USD      = 10.0    # por lote standard, pares USD
 
     def __init__(

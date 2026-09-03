@@ -15,7 +15,6 @@ Uso:
     result = oms.execute(signal_packet, geo_score=0.3, capital=100_000)
 """
 
-import os
 import time
 import logging
 from dataclasses import dataclass, field
@@ -43,14 +42,8 @@ def _pip(symbol: str) -> float:
     return _PIP_SIZE.get(symbol.upper(), _DEFAULT_PIP)
 
 # ── Comissão por tipo de conta (round turn) ──────────────────────────────────
-_COMMISSION_ROUND_TURN = {
-    "RAW_ECN":      6.00,   # $3.00/lado × 2
-    "PRO_ECN":      3.00,   # $1.50/lado × 2
-    "STANDARD_STP": 0.00,   # sem comissão (spread embutido)
-    "CENT":         0.06,   # $0.03/lado × 2 (lotes centavos)
-}
-_ACCOUNT_TYPE = os.getenv("ACCOUNT_TYPE", "RAW_ECN").upper()
-_COMMISSION_RATE = _COMMISSION_ROUND_TURN.get(_ACCOUNT_TYPE, 6.00)
+from core.costs import get_commission_per_lot
+_COMMISSION_RATE = get_commission_per_lot()
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [OMS] %(levelname)s %(message)s")
 
