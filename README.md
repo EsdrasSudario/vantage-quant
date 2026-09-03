@@ -17,7 +17,7 @@ Sistema de trading algoritmico integrado a Vantage Markets via MT5 Python API.
 
 ```bash
 # Clonar o repositorio
-git clone https://github.com/SEU_USUARIO/vantage_quant.git
+git clone https://github.com/EsdrasSudario/vantage-quant.git
 cd vantage_quant
 
 # Instalar dependencias
@@ -39,6 +39,7 @@ Edite o arquivo `config/.env`:
 MT5_LOGIN=SEU_LOGIN
 MT5_PASSWORD=SUA_SENHA
 MT5_SERVER=VantageMarkets-Demo
+ACCOUNT_TYPE=RAW_ECN        # RAW_ECN | PRO_ECN | STANDARD_STP | CENT
 MAX_DAILY_LOSS_PCT=0.02
 MAX_POSITION_SIZE_PCT=0.02
 MAX_LEVERAGE=100
@@ -83,8 +84,14 @@ vantage_quant/
 # Rodar sistema ao vivo (paper trading se MT5 nao conectar)
 python main.py
 
-# Rodar com simbolos especificos
-python main.py --symbols EURUSD GBPUSD AUDUSD NZDUSD --interval 60
+# Rodar com simbolos especificos (usar sufixo + para ECN na Vantage)
+python main.py --symbols AUDUSD+ NZDUSD+ USDJPY+ --interval 60
+
+# Rodar em loop infinito (padrao — --max-iter 0)
+python main.py --symbols AUDUSD+ NZDUSD+ USDJPY+ --interval 60 --max-iter 0
+
+# Windows: evitar UnicodeEncodeError no terminal
+set PYTHONIOENCODING=utf-8 && python main.py --symbols AUDUSD+ NZDUSD+ USDJPY+ --interval 60
 
 # Rodar backtest calibrado $100
 python backtest/bt_runner_100_v3.py
@@ -110,11 +117,17 @@ Tick MT5 → GARCH(1,1) → Regime (low/medium/high vol)
 | Parametro | Valor |
 |-----------|-------|
 | Broker | Vantage Markets |
-| Tipo | RAW ECN |
-| Comissao | $1.50/lote (half-turn) |
-| Spread | 0.0 pip |
+| Tipo recomendado | RAW ECN |
+| Comissao RAW ECN | **$6.00/lote round turn** ($3.00/lado) |
+| Comissao PRO ECN | $3.00/lote round turn ($1.50/lado) — min $10k |
+| Comissao Standard | $0.00 (spread embutido, ~1.0 pip) |
+| Spread RAW ECN | 0.0 pip |
 | Min lot | 0.01 |
 | Alavancagem | 1:100 |
+| Simbolos ECN | Usar sufixo `+` (ex: `AUDUSD+`, `USDJPY+`) |
+
+> **Nota:** O campo `ACCOUNT_TYPE` no `.env` controla o calculo de comissao no sistema.
+> Valores validos: `RAW_ECN`, `PRO_ECN`, `STANDARD_STP`, `CENT`.
 
 ---
 
@@ -122,8 +135,11 @@ Tick MT5 → GARCH(1,1) → Regime (low/medium/high vol)
 
 Periodo: Nov 2025 → Set 2026 | Capital: $100 | 7 simbolos
 
-| Simbolo | Trades | Win% | Net PnL |
-|---------|--------|------|---------|
+> ⚠️ Resultados abaixo usavam comissao $1.50/lot (errada). Com RAW ECN real
+> ($6.00/lot), os resultados sao ~4x mais conservadores. Rebacktest v4 pendente.
+
+| Simbolo | Trades | Win% | Net PnL (v3) |
+|---------|--------|------|--------------|
 | AUDUSD  | 112    | 44.6% | +$9.23 |
 | NZDUSD  | 86     | 37.2% | +$7.23 |
 | GBPUSD  | 126    | 40.5% | +$0.82 |
@@ -132,7 +148,8 @@ Periodo: Nov 2025 → Set 2026 | Capital: $100 | 7 simbolos
 | EURUSD  | 132    | 35.6% | -$36.94 |
 | USDCAD  | 106    | 29.2% | -$56.10 |
 
-**v4 pendente:** remover USDCAD/EURUSD, normalizar threshold Kalman por ativo.
+**v4 pendente:** rebacktest com $6.00/lot real, remover USDCAD/EURUSD,
+normalizar threshold Kalman por ativo, recalibrar MIN_CONFIDENCE (0.15 → 0.30).
 
 ---
 
