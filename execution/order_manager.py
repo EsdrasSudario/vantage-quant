@@ -243,7 +243,7 @@ class OrderManager:
         }
         price    = base_prices.get(symbol, 1.0000)
         slip     = round(random.uniform(0.1, 1.5), 2)    # 0.1–1.5 pips (RAW ECN)
-        filled   = round(price + slip * 0.0001 * (1 if direction=="BUY" else -1), 5)
+        filled   = round(price + slip * _pip(symbol) * (1 if direction=="BUY" else -1), 5)
         ticket   = int(time.time() * 1000) % 999999
 
         log.info(f"[SIM] FILL {symbol} {direction} {volume}L @ {filled} "
