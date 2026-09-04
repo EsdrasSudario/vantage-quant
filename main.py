@@ -14,7 +14,7 @@ Orquestra:
 
 Execução:
     python main.py
-    python main.py --symbols EURUSD USDJPY --interval 60
+    python main.py --symbols AUDUSD NZDUSD USDJPY --interval 60
 """
 
 import os
@@ -321,7 +321,7 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                 z = kp_result["z_score"]
 
                 log.info(
-                    f"  KP {sym_a}/{sym_b} z={z:+.3f} β={kp_result['beta']:.4f}"
+                    f"  KP {sym_a}/{sym_b} z={z:+.3f} beta={kp_result['beta']:.4f}"
                     f" signal={kp_signal}"
                 )
 
@@ -418,7 +418,7 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Vantage Quant System")
     parser.add_argument("--symbols",   nargs="+",
-                        default=["EURUSD", "USDJPY", "GBPUSD"],
+                        default=["AUDUSD", "NZDUSD", "USDJPY"],
                         help="Símbolos a operar")
     parser.add_argument("--interval",  type=int, default=60,
                         help="Intervalo entre ciclos em segundos")
