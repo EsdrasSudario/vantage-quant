@@ -56,8 +56,16 @@ load_dotenv("config/.env")
 # Imports do sistema
 sys.path.insert(0, os.path.dirname(__file__))
 from signals.signal_aggregator import SignalAggregator
+from signals.kalman_filter     import KalmanPairs
 from risk.risk_engine          import RiskEngine, RiskLimits
 from execution.order_manager   import OrderManager
+
+# Pares correlacionados para Stat Arb (KalmanPairs).
+# Apenas os pares cujos dois símbolos estejam na lista --symbols serão ativados.
+_KALMAN_PAIRS = [
+    ("AUDUSD", "NZDUSD"),   # correlação histórica > 0.90 — ambos aprovados no backtest
+    ("EURUSD", "GBPUSD"),   # correlação histórica > 0.85
+]
 
 # MT5 (opcional — Windows)
 try:
@@ -183,6 +191,22 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
     # Aggregators por símbolo
     aggregators = {sym: SignalAggregator(sym) for sym in symbols}
 
+    # KalmanPairs — ativa apenas pares cujos dois símbolos estejam em `symbols`
+    active_kp_pairs = [
+        (a, b) for (a, b) in _KALMAN_PAIRS
+        if a in symbols and b in symbols
+    ]
+    kalman_pairs: dict[tuple, KalmanPairs] = {
+        (a, b): KalmanPairs(delta=1e-4, z_entry=2.0, z_exit=0.5, window=100)
+        for (a, b) in active_kp_pairs
+    }
+    open_stat_arb: dict[tuple, dict] = {}   # (sym_a, sym_b) → posição aberta
+
+    if active_kp_pairs:
+        log.info(f"KalmanPairs ativo para: {active_kp_pairs}")
+    else:
+        log.info("KalmanPairs: nenhum par ativo (símbolos ausentes na lista --symbols)")
+
     # Pré-fit GARCH com dados históricos
     log.info("Pré-carregando dados históricos para GARCH...")
     histories = {}
@@ -191,6 +215,17 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
         aggregators[sym].fit_garch(hist)
         histories[sym] = hist
         log.info(f"  GARCH fitado para {sym} ({len(hist)} barras)")
+
+    # Warm-up dos KalmanPairs com dados históricos (min. 100 barras para z-score estável)
+    if active_kp_pairs:
+        log.info("Warm-up dos KalmanPairs com dados históricos...")
+        for (sym_a, sym_b), kp in kalman_pairs.items():
+            hist_a = histories.get(sym_a, get_prices(sym_a, 200))
+            hist_b = histories.get(sym_b, get_prices(sym_b, 200))
+            n = min(len(hist_a), len(hist_b))
+            for i in range(n):
+                kp.update(float(hist_a.iloc[i]), float(hist_b.iloc[i]))
+            log.info(f"  KalmanPairs {sym_a}/{sym_b} warm-up: {n} barras")
 
     # Loop de trading
     iteration = 0
@@ -273,6 +308,83 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
 
             except Exception as e:
                 log.error(f"  Erro em {sym}: {e}", exc_info=True)
+
+        # ------------------------------------------------------------------
+        # STAT ARB — KalmanPairs
+        # ------------------------------------------------------------------
+        for (sym_a, sym_b), kp in kalman_pairs.items():
+            try:
+                price_a = get_current_price(sym_a)
+                price_b = get_current_price(sym_b)
+                kp_result = kp.update(price_a, price_b)
+                kp_signal = kp_result["signal"]
+                z = kp_result["z_score"]
+
+                log.info(
+                    f"  KP {sym_a}/{sym_b} z={z:+.3f} β={kp_result['beta']:.4f}"
+                    f" signal={kp_signal}"
+                )
+
+                pair_key = (sym_a, sym_b)
+
+                # Fechar posição stat arb existente
+                if pair_key in open_stat_arb and kp_signal == "EXIT":
+                    pos = open_stat_arb[pair_key]
+                    oms.close_position(sym_a, pos["side_a"], pos["volume"])
+                    oms.close_position(sym_b, pos["side_b"], pos["volume"])
+                    risk.close_position(sym_a, price_a)
+                    risk.close_position(sym_b, price_b)
+                    del open_stat_arb[pair_key]
+                    log.info(f"  [KP EXIT] {sym_a}/{sym_b} fechado (z={z:+.3f})")
+                    continue
+
+                # Abrir nova posição stat arb
+                if pair_key not in open_stat_arb and kp_signal in ("BUY_A_SELL_B", "SELL_A_BUY_B"):
+                    side_a = "BUY"  if kp_signal == "BUY_A_SELL_B"  else "SELL"
+                    side_b = "SELL" if kp_signal == "BUY_A_SELL_B"  else "BUY"
+
+                    # Sizing conservador: 0.01 lot fixo por leg (micro)
+                    vol = 0.01
+
+                    res_a = oms.execute(
+                        symbol=sym_a, direction=side_a,
+                        win_prob=0.55, win_loss_ratio=2.0,
+                        geo_score=0.0, size_scalar=0.5,
+                        sl_pips=20, tp_pips=40,
+                    )
+                    res_b = oms.execute(
+                        symbol=sym_b, direction=side_b,
+                        win_prob=0.55, win_loss_ratio=2.0,
+                        geo_score=0.0, size_scalar=0.5,
+                        sl_pips=20, tp_pips=40,
+                    )
+
+                    if res_a.success and res_b.success:
+                        open_stat_arb[pair_key] = {
+                            "side_a": side_a, "side_b": side_b,
+                            "volume": min(res_a.volume, res_b.volume),
+                        }
+                        from risk.risk_engine import Position
+                        risk.open_position(Position(
+                            symbol=sym_a, direction=side_a,
+                            volume=res_a.volume, entry_price=res_a.filled_price,
+                        ))
+                        risk.open_position(Position(
+                            symbol=sym_b, direction=side_b,
+                            volume=res_b.volume, entry_price=res_b.filled_price,
+                        ))
+                        log.info(
+                            f"  [KP OPEN] {sym_a} {side_a} / {sym_b} {side_b}"
+                            f" z={z:+.3f} vol={res_a.volume:.2f}L"
+                        )
+                    else:
+                        log.warning(
+                            f"  [KP REJEITADO] {sym_a}/{sym_b}: "
+                            f"a={res_a.error_msg} b={res_b.error_msg}"
+                        )
+
+            except Exception as e:
+                log.error(f"  Erro KalmanPairs {sym_a}/{sym_b}: {e}", exc_info=True)
 
         # Status do Risk Engine
         status = risk.status()
