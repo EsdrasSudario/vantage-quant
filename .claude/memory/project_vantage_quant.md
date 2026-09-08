@@ -41,9 +41,9 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 | 1.1 | KalmanPairs integrado ao loop principal | ✅ feito | 74cf7cd |
 | 1.2 | Defaults de pares → AUDUSD, NZDUSD, USDJPY | ✅ feito | 6cc58a3 |
 | 1.2b | Resolução dinâmica de símbolos (symbol_resolver.py) | ✅ feito | 48d92d7 |
-| 1.3 | Persistência do RiskEngine (logs/risk_state.json) | ⏳ próxima | — |
+| 1.3 | Persistência do RiskEngine (logs/risk_state.json) | ✅ feito | 7e62a0e |
 
-**Sprint 1 em andamento.** Próxima subfase: **1.3** — persistência do RiskEngine em `logs/risk_state.json`.
+**Sprint 1 concluído.** Próxima subfase: **2.1** — PairScreener algorítmico (`signals/pair_screener.py`).
 
 ## Descobertas críticas
 

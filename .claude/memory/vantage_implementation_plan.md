@@ -912,7 +912,7 @@ SPRINT 1 (Semana 1) ← após SPRINT 0
 ├── 1.1 Integrar KalmanPairs                                    [2h]
 ├── 1.2 Ajustar defaults de pares (resultado do sprint 0)      [30min]
 ├── 1.2b Resolução dinâmica de símbolos (symbol_resolver.py)   [2h]
-└── 1.3 Persistir estado RiskEngine                             [2h]
+└── 1.3 Persistir estado RiskEngine                             ✅ 7e62a0e
 
 SPRINT 2 (Semana 2)
 └── 2.1 PairScreener algorítmico                                [1 dia]
