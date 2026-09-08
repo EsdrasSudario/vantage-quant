@@ -388,6 +388,15 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                     risk.close_position(sym_b, price_b)
                     del open_stat_arb[pair_key]
                     log.info(f"  [KP EXIT] {sym_a}/{sym_b} fechado (z={z:+.3f})")
+                    # Fechar posições diretas abertas nos mesmos símbolos para
+                    # evitar legs órfãs quando sinal direto e stat arb coexistem.
+                    for sym, mt5_sym, price in [(sym_a, mt5_a, price_a), (sym_b, mt5_b, price_b)]:
+                        if sym in open_positions:
+                            direct = open_positions[sym]
+                            oms.close_position(mt5_sym, direct["direction"], direct["volume"])
+                            risk.close_position(sym, price)
+                            del open_positions[sym]
+                            log.info(f"  [KP EXIT] posição direta {sym} fechada junto ao stat arb")
                     continue
 
                 # Abrir nova posição stat arb
