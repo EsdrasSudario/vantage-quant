@@ -18,9 +18,11 @@ Uso:
     approved, size = engine.pre_trade_check(signal_packet)
 """
 
+import json
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, date
 import logging
@@ -64,7 +66,10 @@ class RiskDecision:
 
 class RiskEngine:
 
-    def __init__(self, nav: float, limits: Optional[RiskLimits] = None):
+    _STATE_PATH = "logs/risk_state.json"
+
+    def __init__(self, nav: float, limits: Optional[RiskLimits] = None,
+                 state_path: Optional[str] = None):
         self.nav              = nav
         self.limits           = limits or RiskLimits()
         self.positions:  Dict[str, Position]  = {}
@@ -73,6 +78,8 @@ class RiskEngine:
         self._pnl_history: List[float] = []   # retornos diários para VaR
         self._fill_slippages: List[float] = []
         self._halted: bool = False
+        self._state_path = state_path or self._STATE_PATH
+        self.load_state()
 
     # ------------------------------------------------------------------
     # PRE-TRADE CHECK — ponto central de decisão
@@ -146,9 +153,70 @@ class RiskEngine:
     # ------------------------------------------------------------------
     # POSITION MANAGEMENT
     # ------------------------------------------------------------------
+    def save_state(self) -> None:
+        """Persiste estado crítico em logs/risk_state.json."""
+        state = {
+            "date":        str(self.daily_date),
+            "halted":      self._halted,
+            "daily_pnl":   self.daily_pnl,
+            "pnl_history": self._pnl_history,
+            "positions": {
+                sym: {
+                    "symbol":      pos.symbol,
+                    "direction":   pos.direction,
+                    "volume":      pos.volume,
+                    "entry_price": pos.entry_price,
+                    "open_time":   pos.open_time.isoformat(),
+                    "current_pnl": pos.current_pnl,
+                }
+                for sym, pos in self.positions.items()
+            },
+        }
+        try:
+            Path(self._state_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(self._state_path).write_text(json.dumps(state, indent=2))
+        except Exception as exc:
+            log.error(f"save_state falhou: {exc}")
+
+    def load_state(self) -> None:
+        """Restaura estado do arquivo JSON, se existir e for do dia atual."""
+        path = Path(self._state_path)
+        if not path.exists():
+            return
+        try:
+            state = json.loads(path.read_text())
+        except Exception as exc:
+            log.warning(f"load_state: arquivo inválido — ignorado ({exc})")
+            return
+
+        # Histórico VaR sempre restaurado (multi-dia)
+        self._pnl_history = state.get("pnl_history", [])
+
+        # daily_pnl e halt só valem se for o mesmo dia
+        if state.get("date") == str(date.today()):
+            self.daily_pnl = state.get("daily_pnl", 0.0)
+            self._halted   = state.get("halted", False)
+
+            for sym, p in state.get("positions", {}).items():
+                self.positions[sym] = Position(
+                    symbol=p["symbol"],
+                    direction=p["direction"],
+                    volume=p["volume"],
+                    entry_price=p["entry_price"],
+                    open_time=datetime.fromisoformat(p["open_time"]),
+                    current_pnl=p.get("current_pnl", 0.0),
+                )
+            log.info(
+                f"load_state: PnL={self.daily_pnl:.2f} | halted={self._halted} "
+                f"| posições={len(self.positions)} | VaR pts={len(self._pnl_history)}"
+            )
+        else:
+            log.info(f"load_state: data diferente ({state.get('date')}) — daily PnL/halt zerados; VaR restaurado ({len(self._pnl_history)} pts)")
+
     def open_position(self, pos: Position) -> None:
         self.positions[pos.symbol] = pos
         log.info(f"OPEN {pos.symbol} {pos.direction} {pos.volume}L @ {pos.entry_price}")
+        self.save_state()
 
     # Pip sizes por símbolo (mantido em sync com order_manager._PIP_SIZE)
     _PIP = {"USDJPY": 0.01, "USDJPY+": 0.01, "EURJPY": 0.01, "EURJPY+": 0.01,
@@ -188,6 +256,7 @@ class RiskEngine:
         pnl = pip_diff * pos.volume * pip_value
         self.daily_pnl += pnl
         log.info(f"CLOSE {symbol} PnL={pnl:.2f} | Daily PnL={self.daily_pnl:.2f}")
+        self.save_state()
         return pnl
 
     def record_fill_slippage(self, requested_price: float,
@@ -217,6 +286,7 @@ class RiskEngine:
             self.daily_pnl  = 0.0
             self.daily_date = today
             self._halted    = False
+            self.save_state()
 
     def _check_var(self, prices_df: pd.DataFrame) -> Tuple[bool, float]:
         rets   = np.array(self._pnl_history[-self.limits.var_window_days:])
