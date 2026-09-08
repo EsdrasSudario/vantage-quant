@@ -2,7 +2,7 @@
 
 > **Contexto:** Este documento resume o estado atual do sistema e detalha as implementações pendentes por camada, em ordem de prioridade. Use-o como briefing em qualquer nova sessão para continuar o desenvolvimento sem perda de contexto.
 >
-> **⚠️ Atualizado em 2026-09-03:** Inclui análise completa dos tipos de conta Vantage, correção crítica de custo de transação, definição da estratégia-alvo (Swing Intraday, 3–8 trades/dia), e diagnóstico completo de bloqueadores para operação MT5 Live. Leia a seção "Conta e Custos" e o Sprint 0 completo antes de qualquer implementação.
+> **⚠️ Atualizado em 2026-09-08:** Sprint 0, Sprint 1 e Sprint 2.1 concluídos. Sistema pronto para testes na Cent Account (Sprint 2.5 — ação manual). Próxima implementação: Sprint 3.1 TickCollector asyncio. Descoberta crítica do Kalman registrada — MIN_CONFIDENCE bloqueado em 0.15 até Sprint 6.2.
 
 ---
 
@@ -31,17 +31,15 @@ https://github.com/EsdrasSudario/vantage-quant.git
 | Cent | ~0.0 pip | $0–$3.00 | $50 | ✅ | ✅ **Ideal para testes com capital real mínimo** |
 | Swap-Free | igual base | + taxa adm. noturna | $50 | ✅ | ❌ Taxa extra sem benefício (robô intraday) |
 
-### Bug crítico de custo no sistema atual
+### ✅ Bug de custo corrigido (Sprint 0.5 — commit 07c03e6)
 
-O sistema tem `$1.50/lot` hardcoded em todo o código. Este valor é o da **PRO ECN por lado** — não da RAW ECN que é a conta atual. A RAW ECN cobra **$6.00/lot round turn** — 4× mais caro.
+`core/costs.py` implementado. Custo RAW ECN `$6.00/lot` round turn ativo em todo o sistema. Backtest v4 rerun com custo real concluído.
 
-**Impacto direto:**
-- Todos os resultados de backtest (bt_runner_100_v3) estão **4× mais otimistas** do que a realidade
-- AUDUSD (+$9,23) e NZDUSD (+$7,23) provavelmente ficam negativos com custo real
-- O Kelly está superdimensionando posições porque o edge calculado está errado
-- O MIN_CONFIDENCE de 15% está baixo demais — breakeven real exige confiança maior
+**Resultado com custo correto:**
+- AUDUSD: +$15.54 ✅ | NZDUSD: +$19.73 ✅
+- EURUSD, GBPUSD, USDJPY, USDCAD: negativos ❌
 
-### Correção urgente — tornar o custo configurável por conta
+### Como o custo é configurável por conta
 
 **Arquivo:** `backtest/engine.py`, `execution/order_manager.py`
 
@@ -92,44 +90,55 @@ Com resultados consistentes na Cent, migrar para **PRO ECN real** ($10.000 depó
 
 ---
 
-## Estado Atual das 6 Camadas
+## Estado Atual das 6 Camadas (atualizado 2026-09-08)
 
 | # | Camada | Status | Observação |
 |---|--------|--------|------------|
-| 1 | Data Ingestion | ❌ Ausente | Sem tick_collector, Kafka, TimescaleDB |
-| 2 | Signal Engine | ✅ Funcional | GARCH + Kalman + GeoScore + Aggregator |
-| 3 | Portfolio & Sizing | ⚠️ Parcial | Kelly OK, sem Risk Parity, sem filtro correlação |
-| 4 | Execution Engine | ✅ Funcional | MT5 direto + paper fallback |
-| 5 | Risk Monitor | ✅ Funcional | 7 checks, circuit breaker, VaR in-memory |
-| 6 | Logging/Analytics | ❌ Ausente | Só `logging` padrão Python |
+| 1 | Data Ingestion | ❌ Ausente | Sem tick_collector, Kafka, TimescaleDB — Sprint 3 |
+| 2 | Signal Engine | ✅ Funcional | GARCH + Kalman + GeoScore + Aggregator + KalmanPairs integrado |
+| 3 | Portfolio & Sizing | ✅ Funcional | Kelly + PairScreener com filtro de correlação (Sprint 2.1) |
+| 4 | Execution Engine | ✅ Funcional | MT5 direto + paper fallback + symbol_resolver dinâmico |
+| 5 | Risk Monitor | ✅ Funcional | 7 checks, circuit breaker, VaR in-memory + persistência JSON |
+| 6 | Logging/Analytics | ❌ Ausente | Só `logging` padrão Python — Sprint 5 |
 
-**Lacunas adicionais identificadas:**
-- `KalmanPairs` (stat arb) codado mas não integrado ao `main.py`
-- Seleção de pares 100% manual via CLI (sem screening algorítmico)
-- Estado do RiskEngine in-memory — não persiste entre restarts
-- Backtest sem walk-forward validation
+**Lacunas ainda abertas:**
+- Data layer sem TimescaleDB (Sprint 3)
+- RiskEngine sem Redis — persistência atual é JSON simples (Sprint 4)
+- Logging sem structlog/Grafana/Prometheus (Sprint 5)
+- Backtest sem walk-forward validation (Sprint 6.1)
+- Kalman confidence não discrimina qualidade de sinal — recalibração Sprint 6.2
 
 ---
 
-## Estrutura de Pastas Atual
+## Estrutura de Pastas Atual (atualizado 2026-09-08)
 
 ```
 vantage_quant/
-├── main.py                        ✅ loop principal
+├── main.py                        ✅ loop principal + PairScreener + symbol_resolver
 ├── config/.env                    ✅ credenciais (não commitar)
+├── core/
+│   ├── connection.py              ✅ conexão MT5
+│   ├── costs.py                   ✅ custo RAW ECN $6/lot (fonte única)
+│   └── symbol_resolver.py         ✅ resolução dinâmica de símbolos habilitados
 ├── signals/
 │   ├── garch_model.py             ✅ GARCH(1,1) t-Student
-│   ├── kalman_filter.py           ✅ KalmanTrend + KalmanPairs (não integrado)
-│   ├── geo_score.py               ✅ NLP geopolítico → score 0–1
-│   └── signal_aggregator.py       ✅ combina sinais → SignalPacket
+│   ├── kalman_filter.py           ✅ KalmanTrend + KalmanPairs (integrado Sprint 1.1)
+│   ├── geo_score.py               ✅ NLP geopolítico com RSS feeds reais
+│   ├── signal_aggregator.py       ✅ combina sinais → SignalPacket
+│   └── pair_screener.py           ✅ 5 filtros + score composto (Sprint 2.1)
 ├── risk/
-│   └── risk_engine.py             ✅ 7 checks + circuit breaker
+│   └── risk_engine.py             ✅ 7 checks + circuit breaker + persistência JSON
 ├── execution/
-│   └── order_manager.py           ✅ Kelly + MT5 + paper fallback
+│   └── order_manager.py           ✅ Kelly + MT5 + paper fallback + pip size correto
 ├── backtest/
-│   └── engine.py                  ✅ bar-by-bar + métricas
-├── data/                          ❌ pasta vazia
-└── logs/                          ❌ só arquivos .log texto
+│   ├── engine.py                  ✅ bar-by-bar + custo real
+│   └── bt_runner_100_v4.py        ✅ backtest com $6/lot RAW ECN
+├── tools/
+│   └── check_symbols.py           ✅ diagnóstico de símbolos da conta
+├── data/                          ❌ pasta vazia — Sprint 3
+└── logs/
+    ├── risk_state.json            ✅ persistência do RiskEngine
+    └── *.log                      ⚠️ só logging texto padrão Python
 ```
 
 ---
@@ -138,8 +147,8 @@ vantage_quant/
 
 ---
 
-### FASE 0 — Definição de Estratégia, Correções Bloqueadoras e Recalibração (URGENTE — fazer antes de qualquer outra fase)
-> **Pré-requisito absoluto.** Sem isso, todos os outros desenvolvimentos partem de premissas erradas e o sistema **não pode ser rodado em MT5 Live com segurança**.
+### FASE 0 — Definição de Estratégia, Correções Bloqueadoras e Recalibração ✅ CONCLUÍDA
+> Todos os bloqueadores críticos corrigidos. Sistema seguro para rodar em MT5 Live (exceto 0.8 bloqueado e 0.9 aguardando ação manual).
 
 ---
 
@@ -415,9 +424,7 @@ Acessar [vantagemarkets.com/trading/accounts/pro-ecn](https://www.vantagemarkets
 
 ---
 
-### FASE 1 — Correções Rápidas (1–2 dias)
-> Sem dependências externas. Melhoram o sistema atual sem adicionar infraestrutura.
-> ⚠️ Executar somente após concluir a FASE 0.
+### FASE 1 — Correções Rápidas ✅ CONCLUÍDA (commits 74cf7cd, 6cc58a3, 48d92d7, 7e62a0e)
 
 #### 1.1 Integrar KalmanPairs ao `main.py`
 **Arquivo:** `main.py` + `signals/kalman_filter.py`
@@ -590,10 +597,9 @@ def load_state(self, path="logs/risk_state.json"):
 
 ---
 
-### FASE 2 — Screening de Pares (3–5 dias)
-> Substituir seleção manual por filtros algorítmicos. Sem infraestrutura nova.
+### FASE 2 — Screening de Pares ✅ CONCLUÍDA (commit 4d433dd)
 
-#### 2.1 Criar `signals/pair_screener.py`
+#### 2.1 ✅ `signals/pair_screener.py` implementado
 **Objetivo:** Selecionar automaticamente os N melhores pares a operar em cada sessão.
 
 **Critérios de filtro (implementar em ordem):**
@@ -625,7 +631,7 @@ class PairScreener:
 
 ---
 
-### FASE 3 — Data Layer (1–2 semanas)
+### FASE 3 — Data Layer 🔜 PRÓXIMA (1–2 semanas)
 > Adiciona persistência real de tick data. Requer Docker para TimescaleDB.
 
 #### 3.1 Criar `data/tick_collector.py`
@@ -873,71 +879,70 @@ class WalkForwardValidator:
         return pd.DataFrame(results)
 ```
 
-#### 6.2 Normalizar threshold do Kalman por ativo
+#### 6.2 Recalibração do Kalman + threshold dinâmico por ATR
 
 **Arquivo:** `signals/kalman_filter.py`
 
+> ⚠️ **Descoberta crítica (2026-09-08):** O modelo Kalman atual produz apenas **4 valores discretos** de confidence: `0.1558, 0.1862, 0.2134, 0.2326`. O máximo absoluto é **0.2326**, portanto qualquer `MIN_CONFIDENCE ≥ 0.30` elimina 100% dos sinais. Além disso, a confiança mais alta (0.21+) performa **pior** que a mais baixa — o campo `confidence` não discrimina qualidade de sinal no modelo atual. **Sprint 0.8 permanece bloqueado** até esta recalibração.
+
 **O que fazer:**
+- Investigar por que o modelo colapsa em 4 valores — provável problema de inicialização das matrizes de covariância
 - Calcular `signal_threshold` dinamicamente como `k * ATR(14)` em vez de 0.6 pips fixo
 - `k = 0.5` como default calibrável por símbolo
 - Adicionar parâmetro `atr_multiplier` ao `KalmanTrend.__init__()`
+- Após recalibração: re-avaliar `MIN_CONFIDENCE` e desbloquear Sprint 0.8
 
 ---
 
-## Ordem de Prioridade de Implementação
+## Ordem de Prioridade de Implementação (atualizado 2026-09-08)
 
 ```
-SPRINT 0 (Dias 1–3) ← URGENTE — FAZER PRIMEIRO
-│   ⚠️ Sistema NÃO está pronto para MT5 Live sem estes itens
-│
-├── 0.0  Diagnóstico Live documentado ✅ (4 bloqueadores identificados)
-├── 0.0b Estratégia definida: SWING INTRADAY ✅ (3–8 trades/dia, TP 40p, SL 20p)
-│
-│   — BLOQUEADORES CRÍTICOS (Live inseguro sem estes) —
-├── 0.1  🔴 Corrigir close_position() — fecha errado no MT5     [2h]
-├── 0.2  🔴 Corrigir open_position() — RiskEngine cego ao Live  [2h]
-│
-│   — BLOQUEADORES IMPORTANTES —
-├── 0.3  🟡 Corrigir pip size por símbolo (JPY, XAU)            [1h]
-├── 0.4  🟡 GeoScore com RSS feeds reais (feedparser)           [3h]
-│
-│   — CALIBRAÇÃO E CUSTO —
-├── 0.5  Criar core/costs.py e corrigir custo ($6/lot RAW ECN)  [3h]
-├── 0.6  Corrigir --max-iter default para 0 (infinito)          [15min]
-├── 0.7  Rerunnar todos os backtests com custo real             [2h]
-├── 0.8  Recalibrar MIN_CONFIDENCE (0.15 → 0.30)               [2h]
-└── 0.9  Abrir conta demo PRO ECN + testar conexão MT5         [1h]
+SPRINT 0 ✅ CONCLUÍDO (commit 71f218c, 030ecd1, 07c03e6, 6bd887d)
+├── 0.1  ✅ close_position() corrigido
+├── 0.2  ✅ RiskEngine rastreia posições reais
+├── 0.3  ✅ pip size JPY/XAU corrigido
+├── 0.4  ✅ GeoScore com RSS feeds reais
+├── 0.5  ✅ core/costs.py — $6/lot RAW ECN
+├── 0.6  ✅ --max-iter default=0 (infinito)
+├── 0.7  ✅ Backtests rerunnados com custo real (v4/v4b)
+├── 0.8  ⏸ MIN_CONFIDENCE bloqueado — Kalman max=0.2326, threshold 0.30
+│         elimina 100% dos sinais. Mantido em 0.15. Recalibração no Sprint 6.2.
+└── 0.9  ❌ Conta demo PRO ECN — ação manual pendente
 
-SPRINT 1 (Semana 1) ← após SPRINT 0
-├── 1.1 Integrar KalmanPairs                                    [2h]
-├── 1.2 Ajustar defaults de pares (resultado do sprint 0)      [30min]
-├── 1.2b Resolução dinâmica de símbolos (symbol_resolver.py)   [2h]
-└── 1.3 Persistir estado RiskEngine                             ✅ 7e62a0e
+SPRINT 1 ✅ CONCLUÍDO (commits 74cf7cd, 6cc58a3, 48d92d7, 7e62a0e)
+├── 1.1  ✅ KalmanPairs integrado ao main.py
+├── 1.2  ✅ Defaults → AUDUSD, NZDUSD, USDJPY
+├── 1.2b ✅ symbol_resolver.py — resolução dinâmica de símbolos
+└── 1.3  ✅ Persistência RiskEngine (logs/risk_state.json)
 
-SPRINT 2 (Semana 2)
-└── 2.1 PairScreener algorítmico                                [1 dia]
+SPRINT 2 ✅ CONCLUÍDO (commit 4d433dd)
+└── 2.1  ✅ PairScreener algorítmico (5 filtros + score composto + integrado main.py)
 
-SPRINT 2.5 (Entre Sprint 2 e 3) — Validação Cent Account
+SPRINT 2.5 ⏸ AGUARDA AÇÃO MANUAL — Validação Cent Account
 └── Migrar testes para Cent Account real ($50)                  [1 dia setup]
+    Depositar $50, abrir conta Cent na Vantage, alterar .env ACCOUNT_TYPE=CENT
     Rodar 30–60 dias para validar antes de escalar
 
-SPRINT 3 (Semanas 3–4)
+SPRINT 3 🔜 PRÓXIMA IMPLEMENTAÇÃO
 ├── 3.1 TickCollector asyncio                                   [2 dias]
 ├── 3.2 Docker + TimescaleDB                                    [1 dia]
 └── 3.3 db.py wrapper                                           [1 dia]
 
-SPRINT 4 (Semana 5)
+SPRINT 4
 ├── 4.1 Docker + Redis                                          [4h]
 └── 4.2 RiskEngine com Redis                                    [1 dia]
 
-SPRINT 5 (Semana 6)
+SPRINT 5
 ├── 5.1 structlog                                               [4h]
 ├── 5.2 Docker + Prometheus + Grafana                           [1 dia]
 └── 5.3 metrics.py + dashboards                                 [1 dia]
 
-SPRINT 6 (Semana 7–8)
+SPRINT 6
 ├── 6.1 Walk-Forward Validator                                  [2 dias]
 └── 6.2 Kalman threshold dinâmico por ATR                       [1 dia]
+    ⚠️ Recalibração obrigatória aqui: confidence atual produz só 4 valores
+    discretos (0.1558, 0.1862, 0.2134, 0.2326). Não discrimina qualidade de
+    sinal. Após recalibração, revisar MIN_CONFIDENCE e Sprint 0.8.
 
 SPRINT 7 (Quando Cent Account validada)
 └── Migrar para PRO ECN real ($10.000 depósito)                 [1 dia config]
@@ -1029,4 +1034,4 @@ METRICS_PORT=8000
 
 ---
 
-*Gerado em: 2026-09-02 | Atualizado: 2026-09-03 | Sistema: Vantage Quant v3 → v4*
+*Gerado em: 2026-09-02 | Atualizado: 2026-09-08 | Sistema: Vantage Quant v4 (Sprint 2.1 concluído)*
