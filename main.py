@@ -57,6 +57,8 @@ load_dotenv("config/.env")
 sys.path.insert(0, os.path.dirname(__file__))
 from signals.signal_aggregator import SignalAggregator
 from signals.kalman_filter     import KalmanPairs
+from signals.pair_screener     import PairScreener
+from signals.geo_score         import GeoScorer
 from risk.risk_engine          import RiskEngine, RiskLimits
 from execution.order_manager   import OrderManager
 from core.symbol_resolver      import resolve_mapping
@@ -169,6 +171,9 @@ def get_geo_headlines(max_items: int = 20) -> list:
 # LOOP PRINCIPAL
 # ======================================================================
 
+_SCREENER_INTERVAL_SEC = 4 * 3600   # re-executa screening a cada 4h
+
+
 def run(symbols: list, interval_sec: int, max_iterations: int):
     log.info("="*60)
     log.info("  VANTAGE QUANT SYSTEM — Iniciando")
@@ -188,6 +193,12 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
     )
     risk   = RiskEngine(nav=nav, limits=limits)
     oms    = OrderManager(nav=nav, mt5_connected=MT5_OK, risk_engine=risk)
+
+    # PairScreener — seleciona automaticamente os melhores pares por sessão
+    screener    = PairScreener(universe=symbols, max_pairs=4)
+    geo_screener = GeoScorer()
+    last_screen_time = 0.0   # força execução imediata no startup
+    active_symbols = list(symbols)   # começa com todos; screener refina no primeiro ciclo
 
     # Aggregators por símbolo
     aggregators = {sym: SignalAggregator(sym) for sym in symbols}
@@ -240,6 +251,29 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
 
         headlines = get_geo_headlines()
 
+        # PairScreener — re-executa no startup e a cada 4h
+        now_ts = time.time()
+        if now_ts - last_screen_time >= _SCREENER_INTERVAL_SEC:
+            log.info("  [SCREENER] Executando screening de pares...")
+            bars_for_screen = {
+                sym: pd.DataFrame({
+                    "open":  histories.get(sym, get_prices(sym, 200)),
+                    "high":  histories.get(sym, get_prices(sym, 200)),
+                    "low":   histories.get(sym, get_prices(sym, 200)),
+                    "close": histories.get(sym, get_prices(sym, 200)),
+                })
+                if isinstance(histories.get(sym), pd.Series)
+                else {}
+                for sym in symbols
+            }
+            # Quando MT5 disponível, usa barras H1 via _fetch_bars_mt5 interno
+            screen_report = screener.screen(geo_screener, bars_for_screen, headlines)
+            active_symbols = screen_report.selected if screen_report.selected else list(symbols)
+            last_screen_time = now_ts
+            log.info(f"  [SCREENER] Pares ativos: {active_symbols}")
+            if screen_report.rejected_correlation:
+                log.info(f"  [SCREENER] Rejeitados (correlação): {screen_report.rejected_correlation}")
+
         # Resolve símbolos habilitados na corretora neste ciclo.
         # sym_map: {original: resolvido} — original indexa aggregators/histories,
         # resolvido é usado nas chamadas MT5 (ticks, ordens).
@@ -249,7 +283,10 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
             time.sleep(interval_sec)
             continue
 
-        for sym, mt5_sym in sym_map.items():
+        # Restringe ao subconjunto aprovado pelo screener
+        screened_map = {s: v for s, v in sym_map.items() if s in active_symbols}
+
+        for sym, mt5_sym in screened_map.items():
             # sym     → chave interna (aggregators, histories, open_positions)
             # mt5_sym → símbolo enviado ao MT5 (pode ter sufixo '+')
             try:
