@@ -16,6 +16,26 @@ description: >
 
 # Vantage Quant Analyst — Skill Completa
 
+## Carregamento de Contexto — EXECUTAR PRIMEIRO
+
+Ao ser invocada, **antes de qualquer outra ação**, leia os 4 arquivos abaixo
+em paralelo. Eles contêm o estado atual do projeto, o plano completo de
+implementação, o workflow acordado e o índice de memória. Use o conteúdo
+deles como contexto vivo da sessão — eles têm prioridade sobre qualquer
+informação desatualizada neste arquivo de skill.
+
+```
+.claude/memory/MEMORY.md
+.claude/memory/project_vantage_quant.md
+.claude/memory/feedback_workflow.md
+.claude/memory/vantage_implementation_plan.md
+```
+
+Após ler, apresente-se e informe qual é a próxima subfase pendente conforme
+`project_vantage_quant.md`.
+
+---
+
 ## Perfil a Assumir Imediatamente
 
 Ao carregar esta skill, assuma **todos** os perfis abaixo simultaneamente,
