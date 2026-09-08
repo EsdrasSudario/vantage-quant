@@ -59,6 +59,7 @@ from signals.signal_aggregator import SignalAggregator
 from signals.kalman_filter     import KalmanPairs
 from risk.risk_engine          import RiskEngine, RiskLimits
 from execution.order_manager   import OrderManager
+from core.symbol_resolver      import resolve_mapping
 
 # Pares correlacionados para Stat Arb (KalmanPairs).
 # Apenas os pares cujos dois símbolos estejam na lista --symbols serão ativados.
@@ -239,15 +240,26 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
 
         headlines = get_geo_headlines()
 
-        for sym in symbols:
-            try:
-                current_price = get_current_price(sym)
-                prices_hist   = get_prices(sym, n_bars=500)
+        # Resolve símbolos habilitados na corretora neste ciclo.
+        # sym_map: {original: resolvido} — original indexa aggregators/histories,
+        # resolvido é usado nas chamadas MT5 (ticks, ordens).
+        sym_map = resolve_mapping(symbols) if MT5_OK else {s: s for s in symbols}
+        if not sym_map:
+            log.warning("Nenhum símbolo habilitado neste ciclo — aguardando próximo intervalo")
+            time.sleep(interval_sec)
+            continue
 
-                # Atualiza histórico local
+        for sym, mt5_sym in sym_map.items():
+            # sym     → chave interna (aggregators, histories, open_positions)
+            # mt5_sym → símbolo enviado ao MT5 (pode ter sufixo '+')
+            try:
+                current_price = get_current_price(mt5_sym)
+                prices_hist   = get_prices(mt5_sym, n_bars=500)
+
+                # Atualiza histórico local (indexado pelo nome original)
                 histories[sym] = prices_hist
 
-                # Gera sinal
+                # Gera sinal (aggregator indexado pelo nome original)
                 pkt = aggregators[sym].evaluate(
                     current_price, prices_hist, headlines
                 )
@@ -263,7 +275,7 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                     action = risk.update_position_pnl(sym, current_price)
                     if action == "CLOSE":
                         pos = open_positions[sym]
-                        oms.close_position(sym, pos["direction"], pos["volume"])
+                        oms.close_position(mt5_sym, pos["direction"], pos["volume"])
                         risk.close_position(sym, current_price)
                         del open_positions[sym]
                         log.warning(f"  STOP atingido — {sym} fechado")
@@ -272,7 +284,7 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                 # Executar novo sinal
                 if pkt.direction in ["BUY", "SELL"] and sym not in open_positions:
                     res = oms.execute(
-                        symbol=sym,
+                        symbol=mt5_sym,
                         direction=pkt.direction,
                         win_prob=max(pkt.confidence, 0.51),
                         win_loss_ratio=2.0,
@@ -313,9 +325,12 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
         # STAT ARB — KalmanPairs
         # ------------------------------------------------------------------
         for (sym_a, sym_b), kp in kalman_pairs.items():
+            # Resolve nomes MT5 para cada leg (fallback para o original se não estiver no sym_map)
+            mt5_a = sym_map.get(sym_a, sym_a)
+            mt5_b = sym_map.get(sym_b, sym_b)
             try:
-                price_a = get_current_price(sym_a)
-                price_b = get_current_price(sym_b)
+                price_a = get_current_price(mt5_a)
+                price_b = get_current_price(mt5_b)
                 kp_result = kp.update(price_a, price_b)
                 kp_signal = kp_result["signal"]
                 z = kp_result["z_score"]
@@ -330,8 +345,8 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                 # Fechar posição stat arb existente
                 if pair_key in open_stat_arb and kp_signal == "EXIT":
                     pos = open_stat_arb[pair_key]
-                    oms.close_position(sym_a, pos["side_a"], pos["volume"])
-                    oms.close_position(sym_b, pos["side_b"], pos["volume"])
+                    oms.close_position(mt5_a, pos["side_a"], pos["volume"])
+                    oms.close_position(mt5_b, pos["side_b"], pos["volume"])
                     risk.close_position(sym_a, price_a)
                     risk.close_position(sym_b, price_b)
                     del open_stat_arb[pair_key]
@@ -347,13 +362,13 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                     vol = 0.01
 
                     res_a = oms.execute(
-                        symbol=sym_a, direction=side_a,
+                        symbol=mt5_a, direction=side_a,
                         win_prob=0.55, win_loss_ratio=2.0,
                         geo_score=0.0, size_scalar=0.5,
                         sl_pips=20, tp_pips=40,
                     )
                     res_b = oms.execute(
-                        symbol=sym_b, direction=side_b,
+                        symbol=mt5_b, direction=side_b,
                         win_prob=0.55, win_loss_ratio=2.0,
                         geo_score=0.0, size_scalar=0.5,
                         sl_pips=20, tp_pips=40,
