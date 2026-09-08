@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-08T15:29:28.685Z
+  modified: 2026-09-08T17:54:22.286Z
 ---
 
 # Vantage Quant System
@@ -43,7 +43,21 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 | 1.2b | Resolução dinâmica de símbolos (symbol_resolver.py) | ✅ feito | 48d92d7 |
 | 1.3 | Persistência do RiskEngine (logs/risk_state.json) | ✅ feito | 7e62a0e |
 
-**Sprint 1 concluído.** Próxima subfase: **2.1** — PairScreener algorítmico (`signals/pair_screener.py`).
+## Status das subfases (SPRINT 2)
+
+| Subfase | Descrição | Status | Commit |
+|---------|-----------|--------|--------|
+| 2.1 | PairScreener algorítmico (`signals/pair_screener.py`) | ✅ feito | 4d433dd |
+
+**Sprint 2.1 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
+
+### Detalhes do PairScreener (Sprint 2.1)
+
+- 5 filtros em cascata: liquidez (spread < 2 pips), vol mínima (ATR14 > 5 pips), vol máxima (GARCH < 30%), correlação (> 0.80 remove menor score), GeoScore CRITICAL por exposição temática do par
+- Score composto: 40% spread + 40% ATR + 20% GARCH → ranking dos aprovados
+- Integrado ao `main.py`: executa no startup e a cada 4h (`_SCREENER_INTERVAL_SEC = 14400`)
+- Loop principal filtrado por `active_symbols` (subconjunto aprovado pelo screener)
+- Fallback para barras H1 via MT5 quando `bars` dict não fornecido
 
 ## Descobertas críticas
 
