@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T17:28:00.723Z
+  modified: 2026-09-09T17:44:24.436Z
 ---
 
 # Vantage Quant System
@@ -62,7 +62,7 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 |---|-----|-----------|---------|--------|
 | 1 | `status()` e circuit breaker ignoravam PnL não-realizado | Crítico | `risk/risk_engine.py` | ✅ **CORRIGIDO** |
 | 2 | `record_fill_slippage` usa `10_000` hardcoded (errado para XAU, pip=1.00) | Médio | `risk/risk_engine.py:264` | ✅ **CORRIGIDO** commit 38d35cf |
-| 3 | `_simulate_order` não tem `XAUUSD+` → fallback price=1.0 | Baixo | `execution/order_manager.py:242` | ❌ Pendente |
+| 3 | `_simulate_order` não tem `XAUUSD+` → fallback price=1.0 | Baixo | `execution/order_manager.py:242` | ✅ **CORRIGIDO** commit ed867d8 |
 | 4 | Screener recebe OHLC com open=high=low=close (ATR zero em main.py) | Baixo | `main.py:394` | ❌ Pendente |
 
 #### Bug #1 — CORRIGIDO e commitado (commit f1ca143)
@@ -70,6 +70,12 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 - **`pre_trade_check()` linha 106:** circuit breaker usa `daily_pnl + sum(p.current_pnl for p in self.positions.values())` — evita posições abertas em grande perda escaparem do halt
 - **`status()` linha 314:** retorna `Daily PnL` (total = realizado + não-realizado), `Realized PnL` e `Unrealized PnL` separados
 - Validado por simulação: 11/11 testes PASS
+
+#### Bug #3 — CORRIGIDO e commitado (commit ed867d8)
+
+- **`_simulate_order()` linha 239:** `base_prices` expandido com todos os símbolos da conta demo: `NZDUSD`, `USDCHF+`, `EURGBP+`, `XAGUSD`, `XAUUSD+`
+- Hierarquia de fallback: quando `mt5_connected=True`, tenta `symbol_info_tick()` para preço real (mid de bid/ask); fallback para tabela estática se tick None ou ask=0; fallback final para 1.0 se símbolo desconhecido
+- Validado: 20/20 testes mock (8 cenários, 10 símbolos demo)
 
 #### Bug #2 — CORRIGIDO e commitado (commit 38d35cf)
 
@@ -79,7 +85,7 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 - `main.py:486` atualizado para passar `symbol=sym`
 - Validado: EURUSD 0.3p ✅ | XAUUSD+ 0.11p ✅ (antes reportava 1100p) | USDJPY 0.5p ✅
 
-Próxima subfase: corrigir **Bug #3** (`_simulate_order` fallback XAUUSD+) → **Bug #4** (ATR zero screener) → **Sprint 2.5** Cent Account → **Sprint 3.1** TickCollector asyncio.
+Próxima subfase: corrigir **Bug #4** (ATR zero screener em main.py) → **Sprint 2.5** Cent Account → **Sprint 3.1** TickCollector asyncio.
 
 ### Hotfix — order_manager.py (commit d50713f — 2026-09-09)
 
