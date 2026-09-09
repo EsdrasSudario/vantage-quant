@@ -102,12 +102,13 @@ class RiskEngine:
         if self._halted:
             return RiskDecision(False, 0.0, 0.0, "Sistema em HALT — circuit breaker ativo", alerts)
 
-        # 1. Circuit Breaker Global
-        if self.daily_pnl / self.nav < -self.limits.max_daily_loss_pct:
+        # 1. Circuit Breaker Global (realizado + não-realizado)
+        total_pnl = self.daily_pnl + sum(p.current_pnl for p in self.positions.values())
+        if total_pnl / self.nav < -self.limits.max_daily_loss_pct:
             self._halted = True
-            log.critical(f"CIRCUIT BREAKER: PnL diário {self.daily_pnl/self.nav*100:.2f}%")
+            log.critical(f"CIRCUIT BREAKER: PnL total {total_pnl/self.nav*100:.2f}%")
             return RiskDecision(False, 0.0, 0.0,
-                f"Circuit Breaker: PnL diário {self.daily_pnl:.2f} < -{self.limits.max_daily_loss_pct*100:.0f}% NAV",
+                f"Circuit Breaker: PnL total {total_pnl:.2f} < -{self.limits.max_daily_loss_pct*100:.0f}% NAV",
                 alerts)
 
         # 2. Máximo de posições abertas
@@ -309,14 +310,18 @@ class RiskEngine:
         return np.mean(self._fill_slippages) if self._fill_slippages else 0.0
 
     def status(self) -> dict:
+        unrealized = sum(p.current_pnl for p in self.positions.values())
+        total_pnl  = self.daily_pnl + unrealized
         return {
-            "NAV":             self.nav,
-            "Daily PnL":       round(self.daily_pnl, 2),
-            "Daily PnL %":     round(self.daily_pnl / self.nav * 100, 3),
-            "Open Positions":  len(self.positions),
-            "Halted":          self._halted,
-            "Avg Slippage":    round(self._avg_slippage(), 2),
-            "VaR history pts": len(self._pnl_history),
+            "NAV":                self.nav,
+            "Daily PnL":          round(total_pnl, 2),
+            "Daily PnL %":        round(total_pnl / self.nav * 100, 3),
+            "Realized PnL":       round(self.daily_pnl, 2),
+            "Unrealized PnL":     round(unrealized, 2),
+            "Open Positions":     len(self.positions),
+            "Halted":             self._halted,
+            "Avg Slippage":       round(self._avg_slippage(), 2),
+            "VaR history pts":    len(self._pnl_history),
         }
 
 

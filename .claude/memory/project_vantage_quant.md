@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T16:08:35.031Z
+  modified: 2026-09-09T17:08:41.752Z
 ---
 
 # Vantage Quant System
@@ -52,7 +52,26 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 | 2.3 | sync_startup_positions() — restaura posições no startup | ✅ feito | f76706c |
 | 2.4 | PairScreener: resolve símbolo MT5 antes de chamar API | ✅ feito | 23bef48 |
 
-**Sprint 2.4 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
+**Sprint 2.4 concluído.**
+
+### Sessão XAUUSD+ Live — Bugs identificados e status (2026-09-09)
+
+Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
+
+| # | Bug | Severidade | Arquivo | Status |
+|---|-----|-----------|---------|--------|
+| 1 | `status()` e circuit breaker ignoravam PnL não-realizado | Crítico | `risk/risk_engine.py` | ✅ **CORRIGIDO** |
+| 2 | `record_fill_slippage` usa `10_000` hardcoded (errado para XAU, pip=1.00) | Médio | `risk/risk_engine.py:264` | ❌ Pendente |
+| 3 | `_simulate_order` não tem `XAUUSD+` → fallback price=1.0 | Baixo | `execution/order_manager.py:242` | ❌ Pendente |
+| 4 | Screener recebe OHLC com open=high=low=close (ATR zero em main.py) | Baixo | `main.py:394` | ❌ Pendente |
+
+#### Bug #1 — Fix aplicado (não commitado)
+
+- **`pre_trade_check()` linha 106:** circuit breaker agora usa `daily_pnl + sum(p.current_pnl for p in self.positions.values())` — evita posições abertas em grande perda escaparem do halt
+- **`status()` linha 312:** agora retorna `Daily PnL` (total = realizado + não-realizado), `Realized PnL` e `Unrealized PnL` separados
+- Validado por simulação: 12/15 testes PASS; Bugs 2 e 3 confirmados pendentes pela simulação
+
+Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Antes disso: corrigir Bugs #2 e #3 pendentes. Após 2.5: **Sprint 3.1** TickCollector asyncio.
 
 ### Hotfix — order_manager.py (commit d50713f — 2026-09-09)
 
