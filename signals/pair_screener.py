@@ -109,7 +109,7 @@ class PairScreener:
     _PIP: dict[str, float] = {
         "USDJPY": 0.01, "EURJPY": 0.01, "GBPJPY": 0.01,
         "AUDJPY": 0.01, "NZDJPY": 0.01, "CADJPY": 0.01,
-        "XAUUSD": 0.10, "XAGUSD": 0.01,
+        "XAUUSD": 1.00, "XAGUSD": 0.01,
     }
     _DEFAULT_PIP = 0.0001
 

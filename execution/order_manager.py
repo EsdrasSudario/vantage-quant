@@ -24,7 +24,7 @@ from datetime import datetime
 log = logging.getLogger("OMS")
 
 # ── Pip size por símbolo ──────────────────────────────────────────────────────
-# Pares JPY: 1 pip = 0.01 | XAU: 1 pip = 0.10 | demais: 1 pip = 0.0001
+# Pares JPY: 1 pip = 0.01 | XAU: 1 pip = 1.00 | demais: 1 pip = 0.0001
 _PIP_SIZE = {
     "USDJPY": 0.01,  "USDJPY+": 0.01,
     "EURJPY": 0.01,  "EURJPY+": 0.01,
@@ -33,7 +33,7 @@ _PIP_SIZE = {
     "NZDJPY": 0.01,  "NZDJPY+": 0.01,
     "CADJPY": 0.01,  "CADJPY+": 0.01,
     "CHFJPY": 0.01,  "CHFJPY+": 0.01,
-    "XAUUSD": 0.10,  "XAUUSD+": 0.10,
+    "XAUUSD": 1.00,  "XAUUSD+": 1.00,
 }
 _DEFAULT_PIP = 0.0001
 

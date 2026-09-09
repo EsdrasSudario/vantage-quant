@@ -222,7 +222,7 @@ class RiskEngine:
     _PIP = {"USDJPY": 0.01, "USDJPY+": 0.01, "EURJPY": 0.01, "EURJPY+": 0.01,
             "GBPJPY": 0.01, "GBPJPY+": 0.01, "AUDJPY": 0.01, "AUDJPY+": 0.01,
             "NZDJPY": 0.01, "NZDJPY+": 0.01, "CADJPY": 0.01, "CADJPY+": 0.01,
-            "XAUUSD": 0.10, "XAUUSD+": 0.10}
+            "XAUUSD": 1.00, "XAUUSD+": 1.00}
 
     def update_position_pnl(self, symbol: str, current_price: float,
                             pip_value: float = 10.0) -> Optional[str]:
