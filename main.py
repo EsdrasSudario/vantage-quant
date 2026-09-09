@@ -128,6 +128,83 @@ def get_current_price(symbol: str) -> float:
     return float(prices.iloc[-1])
 
 
+def sync_startup_positions(
+    open_positions: dict,
+    open_stat_arb: dict,
+    risk: "RiskEngine",
+    symbols: list,
+    sym_map: dict,
+    magic: int = 0,
+) -> None:
+    """Popula open_positions e risk.positions com posições já abertas no MT5.
+
+    Chamado uma única vez no startup, após inicializar os componentes e antes
+    do loop principal.  Sem isso, o RiskEngine subestima a exposição real e
+    pode abrir ordens além do limite quando o processo é reiniciado com
+    posições vivas no terminal.
+
+    Parâmetros
+    ----------
+    magic : int
+        Magic number usado pelo sistema (0 = aceita qualquer magic, útil para
+        contas demo onde as ordens podem ter magic=0).
+    """
+    if not MT5_OK:
+        return
+
+    # Inverte sym_map para resolver mt5_sym → sym_original
+    rev_map = {v: k for k, v in sym_map.items()}
+
+    all_positions = mt5.positions_get()
+    if not all_positions:
+        log.info("[STARTUP SYNC] Nenhuma posição aberta no MT5.")
+        return
+
+    count = 0
+    for p in all_positions:
+        if magic != 0 and p.magic != magic:
+            continue  # filtra por magic quando especificado
+
+        mt5_sym = p.symbol
+        sym = rev_map.get(mt5_sym, mt5_sym)
+
+        # Ignora símbolos fora do universo operado
+        if sym not in symbols:
+            log.debug(f"[STARTUP SYNC] {mt5_sym} fora do universo — ignorado")
+            continue
+
+        direction = "BUY" if p.type == 0 else "SELL"   # 0=ORDER_TYPE_BUY
+
+        if sym not in open_positions:
+            open_positions[sym] = {
+                "direction": direction,
+                "volume":    p.volume,
+                "entry":     p.price_open,
+                "ticket":    p.ticket,
+            }
+
+        from risk.risk_engine import Position
+        risk.positions[sym] = Position(
+            symbol=sym,
+            direction=direction,
+            volume=p.volume,
+            entry_price=p.price_open,
+            open_time=datetime.utcfromtimestamp(p.time),
+            current_pnl=p.profit,
+        )
+        count += 1
+        log.info(
+            f"[STARTUP SYNC] {sym} ({mt5_sym}) {direction} "
+            f"{p.volume:.2f}L @ {p.price_open:.5f} "
+            f"ticket={p.ticket} profit={p.profit:.2f}"
+        )
+
+    if count:
+        log.info(f"[STARTUP SYNC] {count} posição(ões) restaurada(s) no RiskEngine.")
+    else:
+        log.info("[STARTUP SYNC] Nenhuma posição do universo ativa no MT5.")
+
+
 def sync_closed_positions(
     open_positions: dict,
     open_stat_arb: dict,
@@ -288,6 +365,14 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
     # Loop de trading
     iteration = 0
     open_positions = {}
+
+    # Sync de startup: restaura posições já abertas no terminal MT5.
+    # Deve ocorrer após sym_map estar disponível, mas antes do loop.
+    startup_sym_map = resolve_mapping(symbols) if MT5_OK else {s: s for s in symbols}
+    sync_startup_positions(
+        open_positions, open_stat_arb, risk,
+        symbols, startup_sym_map, magic=0,
+    )
 
     while iteration < max_iterations:
         iteration += 1
