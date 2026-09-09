@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T14:44:30.649Z
+  modified: 2026-09-09T15:12:38.354Z
 ---
 
 # Vantage Quant System
@@ -53,6 +53,13 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 | 2.4 | PairScreener: resolve símbolo MT5 antes de chamar API | ✅ feito | 23bef48 |
 
 **Sprint 2.4 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
+
+### Hotfix — order_manager.py (commit d50713f — 2026-09-09)
+
+- Magic number atualizado: `20260831` → `09092026` (data atual)
+- Comment de abertura: `vantage_quant_v1` → `vantage_quant_v2`
+- Comment de fechamento: `close_vantage_quant` → `close_vantage_quant_v2`
+- Aplicado em ambos os blocos de request (abertura linha ~203 e fechamento linha ~293)
 
 ### Detalhes do PairScreener (Sprint 2.1 + 2.4)
 
