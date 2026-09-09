@@ -484,7 +484,8 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
                             entry_price=res.filled_price,
                         ))
                         risk.record_fill_slippage(res.requested_price,
-                                                  res.filled_price)
+                                                  res.filled_price,
+                                                  symbol=sym)
                         log.info(
                             f"  [OK] ORDEM {sym} {pkt.direction} "
                             f"{res.volume:.2f}L @ {res.filled_price:.5f} "

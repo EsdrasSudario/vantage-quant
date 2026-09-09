@@ -261,8 +261,10 @@ class RiskEngine:
         return pnl
 
     def record_fill_slippage(self, requested_price: float,
-                             filled_price: float) -> None:
-        slip_pips = abs(filled_price - requested_price) * 10_000
+                             filled_price: float,
+                             symbol: str = "") -> None:
+        pip_size = self._PIP.get(symbol, 0.0001)
+        slip_pips = abs(filled_price - requested_price) / pip_size
         self._fill_slippages.append(slip_pips)
         if len(self._fill_slippages) > 50:
             self._fill_slippages.pop(0)
