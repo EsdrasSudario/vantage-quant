@@ -119,6 +119,31 @@ def get_prices(symbol: str, n_bars: int = 500) -> pd.Series:
     )
 
 
+def get_ohlc(symbol: str, n_bars: int = 200) -> pd.DataFrame:
+    """Retorna DataFrame OHLC real (open, high, low, close) para o screener."""
+    if MT5_OK:
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, n_bars)
+        if rates is not None and len(rates) > 0:
+            df = pd.DataFrame(rates)
+            df["time"] = pd.to_datetime(df["time"], unit="s")
+            return df.set_index("time")[["open", "high", "low", "close"]]
+    # Fallback paper trading — gera OHLC sintético com variação realista
+    idx = pd.date_range(end=datetime.utcnow(), periods=n_bars, freq="1h")
+    base = {"EURUSD": 1.0850, "USDJPY": 148.50, "GBPUSD": 1.2720,
+            "XAUUSD": 2450.0, "XAUUSD+": 2450.0, "AUDUSD": 0.6480,
+            "NZDUSD": 0.5950, "USDCAD": 1.3540, "USDCHF+": 0.8960,
+            "EURGBP+": 0.8540, "XAGUSD": 29.50}
+    price = base.get(symbol, 1.0)
+    closes = price + np.cumsum(np.random.normal(0, price * 0.0003, n_bars))
+    noise  = np.abs(np.random.normal(0, price * 0.0002, n_bars))
+    return pd.DataFrame({
+        "open":  closes - noise * 0.3,
+        "high":  closes + noise,
+        "low":   closes - noise,
+        "close": closes,
+    }, index=idx)
+
+
 def get_current_price(symbol: str) -> float:
     if MT5_OK:
         tick = mt5.symbol_info_tick(symbol)
@@ -391,15 +416,9 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
         now_ts = time.time()
         if now_ts - last_screen_time >= _SCREENER_INTERVAL_SEC:
             log.info("  [SCREENER] Executando screening de pares...")
+            _screen_sym_map = resolve_mapping(symbols) if MT5_OK else {s: s for s in symbols}
             bars_for_screen = {
-                sym: pd.DataFrame({
-                    "open":  histories.get(sym, get_prices(sym, 200)),
-                    "high":  histories.get(sym, get_prices(sym, 200)),
-                    "low":   histories.get(sym, get_prices(sym, 200)),
-                    "close": histories.get(sym, get_prices(sym, 200)),
-                })
-                if isinstance(histories.get(sym), pd.Series)
-                else {}
+                sym: get_ohlc(_screen_sym_map.get(sym, sym), 200)
                 for sym in symbols
             }
             # Quando MT5 disponível, usa barras H1 via _fetch_bars_mt5 interno
