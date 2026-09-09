@@ -318,7 +318,12 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
     oms    = OrderManager(nav=nav, mt5_connected=MT5_OK, risk_engine=risk)
 
     # PairScreener — seleciona automaticamente os melhores pares por sessão
-    screener    = PairScreener(universe=symbols, max_pairs=4)
+    # resolve_fn: mapeia nome canônico → nome real MT5 (ex: XAUUSD → XAUUSD+)
+    _sym_map_cache: dict[str, str] = resolve_mapping(symbols)
+    def _resolve_symbol(sym: str) -> str:
+        return _sym_map_cache.get(sym, sym)
+
+    screener    = PairScreener(universe=symbols, max_pairs=4, symbol_resolve_fn=_resolve_symbol)
     geo_screener = GeoScorer()
     last_screen_time = 0.0   # força execução imediata no startup
     active_symbols = list(symbols)   # começa com todos; screener refina no primeiro ciclo

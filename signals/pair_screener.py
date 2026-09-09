@@ -20,7 +20,7 @@ import logging
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 log = logging.getLogger("PairScreener")
 
@@ -122,6 +122,7 @@ class PairScreener:
         max_garch_pct: float = 30.0,
         max_correlation: float = 0.80,
         tick_history: int = 100,
+        symbol_resolve_fn: Optional[Callable[[str], str]] = None,
     ):
         self.universe        = universe or self.UNIVERSE
         self.max_pairs       = max_pairs
@@ -130,6 +131,8 @@ class PairScreener:
         self.max_garch_pct   = max_garch_pct
         self.max_correlation = max_correlation
         self.tick_history    = tick_history
+        # Função que mapeia símbolo canônico → nome real no MT5 (ex: XAUUSD → XAUUSD+)
+        self._resolve        = symbol_resolve_fn or (lambda s: s)
 
     # ------------------------------------------------------------------
     # Ponto de entrada principal
@@ -310,9 +313,10 @@ class PairScreener:
         if not _MT5_OK:
             return 0.0
         try:
+            mt5_symbol = self._resolve(symbol)
             ticks = mt5.copy_ticks_from(
-                symbol,
-                mt5.symbol_info_tick(symbol).time - self.tick_history * 60,
+                mt5_symbol,
+                mt5.symbol_info_tick(mt5_symbol).time - self.tick_history * 60,
                 self.tick_history,
                 mt5.COPY_TICKS_ALL,
             )
@@ -388,12 +392,13 @@ class PairScreener:
         if not _MT5_OK:
             return None
         try:
-            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, n)
+            mt5_symbol = self._resolve(symbol)
+            rates = mt5.copy_rates_from_pos(mt5_symbol, mt5.TIMEFRAME_H1, 0, n)
             if rates is None or len(rates) == 0:
                 return None
             df = pd.DataFrame(rates)
-            df.columns = [c.lower() for c in df.dtype.names] \
-                if hasattr(rates, "dtype") else df.columns
+            df.columns = [c.lower() for c in rates.dtype.names] \
+                if hasattr(rates, "dtype") and rates.dtype.names else df.columns
             # copy_rates retorna structured array
             df = pd.DataFrame({
                 "open":  rates["open"],
