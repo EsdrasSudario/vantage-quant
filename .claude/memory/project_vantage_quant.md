@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T13:52:26.204Z
+  modified: 2026-09-09T14:44:30.649Z
 ---
 
 # Vantage Quant System
@@ -50,16 +50,21 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 | 2.1 | PairScreener algorítmico (`signals/pair_screener.py`) | ✅ feito | 4d433dd |
 | 2.2 | sync_closed_positions() — fix bug posição zumbi SL/TP | ✅ feito | 3fbb1c6 |
 | 2.3 | sync_startup_positions() — restaura posições no startup | ✅ feito | f76706c |
+| 2.4 | PairScreener: resolve símbolo MT5 antes de chamar API | ✅ feito | 23bef48 |
 
-**Sprint 2.3 concluído.** Fix pip XAUUSD aplicado (hotfix cfca9db). Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
+**Sprint 2.4 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
 
-### Detalhes do PairScreener (Sprint 2.1)
+### Detalhes do PairScreener (Sprint 2.1 + 2.4)
 
 - 5 filtros em cascata: liquidez (spread < 2 pips), vol mínima (ATR14 > 5 pips), vol máxima (GARCH < 30%), correlação (> 0.80 remove menor score), GeoScore CRITICAL por exposição temática do par
 - Score composto: 40% spread + 40% ATR + 20% GARCH → ranking dos aprovados
 - Integrado ao `main.py`: executa no startup e a cada 4h (`_SCREENER_INTERVAL_SEC = 14400`)
 - Loop principal filtrado por `active_symbols` (subconjunto aprovado pelo screener)
 - Fallback para barras H1 via MT5 quando `bars` dict não fornecido
+- **Sprint 2.4:** `symbol_resolve_fn` injetado no `__init__` — `_fetch_bars_mt5` e `_spread_pips` resolvem nome canônico → nome MT5 (ex: XAUUSD → XAUUSD+) antes de cada chamada; nome canônico mantido em toda a lógica interna
+- **Sprint 2.4:** Bugfix `df.dtype.names → rates.dtype.names` em `_fetch_bars_mt5` (causava retorno silencioso de None com dados válidos)
+- **Sprint 2.4:** `main.py` constrói closure `_resolve_symbol` via `resolve_mapping(symbols)` e passa como `symbol_resolve_fn` ao `PairScreener`
+- **Sprint 2.4:** `tests/test_pair_screener.py` criado com 12 testes unitários (7 originais + 5 do padrão main.py)
 
 ## Descobertas críticas
 
