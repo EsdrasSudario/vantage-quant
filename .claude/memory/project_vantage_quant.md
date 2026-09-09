@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T13:37:11.866Z
+  modified: 2026-09-09T13:52:26.204Z
 ---
 
 # Vantage Quant System
@@ -51,7 +51,7 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 | 2.2 | sync_closed_positions() — fix bug posição zumbi SL/TP | ✅ feito | 3fbb1c6 |
 | 2.3 | sync_startup_positions() — restaura posições no startup | ✅ feito | f76706c |
 
-**Sprint 2.3 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
+**Sprint 2.3 concluído.** Fix pip XAUUSD aplicado (hotfix cfca9db). Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
 
 ### Detalhes do PairScreener (Sprint 2.1)
 
@@ -86,6 +86,7 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 - **Pares aprovados (Net>0, PF>1.3):** AUDUSD (+$15.54), NZDUSD (+$19.73)
 - **Reprovados:** EURUSD, GBPUSD, USDJPY, USDCAD
 - **XAUUSD+ incompatível** com SL/TP fixos em pips no backtest H1
+- ⚠️ pip size XAUUSD corrigido de 0.10 → **1.00** (hotfix cfca9db) em `order_manager.py`, `pair_screener.py`, `risk_engine.py` — SL=20p=$20, TP=40p=$40 agora realistas
 
 ### Problema identificado no Kalman confidence
 - O modelo só produz 4 valores discretos: 0.1558, 0.1862, 0.2134, 0.2326
