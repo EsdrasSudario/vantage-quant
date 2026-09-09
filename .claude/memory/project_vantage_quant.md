@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T17:08:41.752Z
+  modified: 2026-09-09T17:28:00.723Z
 ---
 
 # Vantage Quant System
@@ -61,17 +61,25 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 | # | Bug | Severidade | Arquivo | Status |
 |---|-----|-----------|---------|--------|
 | 1 | `status()` e circuit breaker ignoravam PnL não-realizado | Crítico | `risk/risk_engine.py` | ✅ **CORRIGIDO** |
-| 2 | `record_fill_slippage` usa `10_000` hardcoded (errado para XAU, pip=1.00) | Médio | `risk/risk_engine.py:264` | ❌ Pendente |
+| 2 | `record_fill_slippage` usa `10_000` hardcoded (errado para XAU, pip=1.00) | Médio | `risk/risk_engine.py:264` | ✅ **CORRIGIDO** commit 38d35cf |
 | 3 | `_simulate_order` não tem `XAUUSD+` → fallback price=1.0 | Baixo | `execution/order_manager.py:242` | ❌ Pendente |
 | 4 | Screener recebe OHLC com open=high=low=close (ATR zero em main.py) | Baixo | `main.py:394` | ❌ Pendente |
 
-#### Bug #1 — Fix aplicado (não commitado)
+#### Bug #1 — CORRIGIDO e commitado (commit f1ca143)
 
-- **`pre_trade_check()` linha 106:** circuit breaker agora usa `daily_pnl + sum(p.current_pnl for p in self.positions.values())` — evita posições abertas em grande perda escaparem do halt
-- **`status()` linha 312:** agora retorna `Daily PnL` (total = realizado + não-realizado), `Realized PnL` e `Unrealized PnL` separados
-- Validado por simulação: 12/15 testes PASS; Bugs 2 e 3 confirmados pendentes pela simulação
+- **`pre_trade_check()` linha 106:** circuit breaker usa `daily_pnl + sum(p.current_pnl for p in self.positions.values())` — evita posições abertas em grande perda escaparem do halt
+- **`status()` linha 314:** retorna `Daily PnL` (total = realizado + não-realizado), `Realized PnL` e `Unrealized PnL` separados
+- Validado por simulação: 11/11 testes PASS
 
-Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Antes disso: corrigir Bugs #2 e #3 pendentes. Após 2.5: **Sprint 3.1** TickCollector asyncio.
+#### Bug #2 — CORRIGIDO e commitado (commit 38d35cf)
+
+- **`record_fill_slippage()` linha 263:** assinatura estendida com `symbol: str = ""`
+- Usa `self._PIP.get(symbol, 0.0001)` para pip_size correto por símbolo (XAUUSD+=1.00, JPY=0.01, default=0.0001)
+- `slip_pips = abs(filled_price - requested_price) / pip_size` — divisão correta (antes: `* 10_000` hardcoded)
+- `main.py:486` atualizado para passar `symbol=sym`
+- Validado: EURUSD 0.3p ✅ | XAUUSD+ 0.11p ✅ (antes reportava 1100p) | USDJPY 0.5p ✅
+
+Próxima subfase: corrigir **Bug #3** (`_simulate_order` fallback XAUUSD+) → **Bug #4** (ATR zero screener) → **Sprint 2.5** Cent Account → **Sprint 3.1** TickCollector asyncio.
 
 ### Hotfix — order_manager.py (commit d50713f — 2026-09-09)
 
