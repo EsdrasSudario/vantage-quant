@@ -2,7 +2,7 @@
 
 > **Contexto:** Este documento resume o estado atual do sistema e detalha as implementações pendentes por camada, em ordem de prioridade. Use-o como briefing em qualquer nova sessão para continuar o desenvolvimento sem perda de contexto.
 >
-> **⚠️ Atualizado em 2026-09-08:** Sprint 0, Sprint 1 e Sprint 2.1 concluídos. Sistema pronto para testes na Cent Account (Sprint 2.5 — ação manual). Próxima implementação: Sprint 3.1 TickCollector asyncio. Descoberta crítica do Kalman registrada — MIN_CONFIDENCE bloqueado em 0.15 até Sprint 6.2.
+> **⚠️ Atualizado em 2026-09-09:** Sprint 0, Sprint 1 e Sprint 2 (incluindo 2.2, 2.3, 2.4) concluídos. Todos os 4 bugs da sessão live XAUUSD+ corrigidos (commits f1ca143, 38d35cf, ed867d8, ba222b8). Sistema pronto para testes na Cent Account (Sprint 2.5 — ação manual). Próxima implementação: Sprint 3.1 TickCollector asyncio. Descoberta crítica do Kalman registrada — MIN_CONFIDENCE bloqueado em 0.15 até Sprint 6.2.
 
 ---
 
@@ -41,7 +41,7 @@ https://github.com/EsdrasSudario/vantage-quant.git
 
 ---
 
-## Estado Atual das 6 Camadas (atualizado 2026-09-08)
+## Estado Atual das 6 Camadas (atualizado 2026-09-09)
 
 | # | Camada | Status | Observação |
 |---|--------|--------|------------|
@@ -61,11 +61,11 @@ https://github.com/EsdrasSudario/vantage-quant.git
 
 ---
 
-## Estrutura de Pastas Atual (atualizado 2026-09-08)
+## Estrutura de Pastas Atual (atualizado 2026-09-09)
 
 ```
 vantage_quant/
-├── main.py                        ✅ loop principal + PairScreener + symbol_resolver
+├── main.py                        ✅ loop principal + PairScreener + symbol_resolver + get_ohlc()
 ├── config/.env                    ✅ credenciais (não commitar)
 ├── core/
 │   ├── connection.py              ✅ conexão MT5
@@ -94,7 +94,7 @@ vantage_quant/
 
 ---
 
-## Ordem de Prioridade de Implementação (atualizado 2026-09-08)
+## Ordem de Prioridade de Implementação (atualizado 2026-09-09)
 
 ```
 SPRINT 0 ✅ CONCLUÍDO (commit 71f218c, 030ecd1, 07c03e6, 6bd887d)
@@ -115,8 +115,18 @@ SPRINT 1 ✅ CONCLUÍDO (commits 74cf7cd, 6cc58a3, 48d92d7, 7e62a0e)
 ├── 1.2b ✅ symbol_resolver.py — resolução dinâmica de símbolos
 └── 1.3  ✅ Persistência RiskEngine (logs/risk_state.json)
 
-SPRINT 2 ✅ CONCLUÍDO (commit 4d433dd)
-└── 2.1  ✅ PairScreener algorítmico (5 filtros + score composto + integrado main.py)
+SPRINT 2 ✅ CONCLUÍDO (commits 4d433dd, 3fbb1c6, f76706c, 23bef48)
+├── 2.1  ✅ PairScreener algorítmico (5 filtros + score composto + integrado main.py)
+├── 2.2  ✅ sync_closed_positions() — fix posição zumbi após SL/TP
+├── 2.3  ✅ sync_startup_positions() — restaura posições no boot
+└── 2.4  ✅ PairScreener resolve símbolo MT5 antes de chamar API
+
+BUGS LIVE XAUUSD+ ✅ TODOS CORRIGIDOS (sessão 2026-09-09)
+├── Bug#1 ✅ PnL não-realizado incluso no circuit breaker e status() (f1ca143)
+├── Bug#2 ✅ record_fill_slippage usa pip_size correto por símbolo (38d35cf)
+├── Bug#3 ✅ _simulate_order com preços para todos os símbolos demo (ed867d8)
+└── Bug#4 ✅ get_ohlc() substitui Series de closes por barras H1 reais (ba222b8)
+            Validado: 38/38 testes mock — 5 cenários, 4 símbolos incl. XAUUSD+
 
 SPRINT 2.5 ⏸ AGUARDA AÇÃO MANUAL — Validação Cent Account
 └── Migrar testes para Cent Account real ($50)                  [1 dia setup]
@@ -174,4 +184,4 @@ pip install MetaTrader5 arch pykalman pandas numpy scipy scikit-learn
 
 ---
 
-*Gerado em: 2026-09-02 | Atualizado: 2026-09-08 | Sistema: Vantage Quant v4 (Sprint 2.1 concluído)*
+*Gerado em: 2026-09-02 | Atualizado: 2026-09-09 | Sistema: Vantage Quant v4 (Sprint 2 completo + 4 bugs live corrigidos)*

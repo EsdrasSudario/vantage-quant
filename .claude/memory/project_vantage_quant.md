@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T17:44:24.436Z
+  modified: 2026-09-09T18:00:50.529Z
 ---
 
 # Vantage Quant System
@@ -63,7 +63,7 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 | 1 | `status()` e circuit breaker ignoravam PnL não-realizado | Crítico | `risk/risk_engine.py` | ✅ **CORRIGIDO** |
 | 2 | `record_fill_slippage` usa `10_000` hardcoded (errado para XAU, pip=1.00) | Médio | `risk/risk_engine.py:264` | ✅ **CORRIGIDO** commit 38d35cf |
 | 3 | `_simulate_order` não tem `XAUUSD+` → fallback price=1.0 | Baixo | `execution/order_manager.py:242` | ✅ **CORRIGIDO** commit ed867d8 |
-| 4 | Screener recebe OHLC com open=high=low=close (ATR zero em main.py) | Baixo | `main.py:394` | ❌ Pendente |
+| 4 | Screener recebe OHLC com open=high=low=close (ATR zero em main.py) | Baixo | `main.py:394` | ✅ **CORRIGIDO** commit ba222b8 |
 
 #### Bug #1 — CORRIGIDO e commitado (commit f1ca143)
 
@@ -85,7 +85,16 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 - `main.py:486` atualizado para passar `symbol=sym`
 - Validado: EURUSD 0.3p ✅ | XAUUSD+ 0.11p ✅ (antes reportava 1100p) | USDJPY 0.5p ✅
 
-Próxima subfase: corrigir **Bug #4** (ATR zero screener em main.py) → **Sprint 2.5** Cent Account → **Sprint 3.1** TickCollector asyncio.
+#### Bug #4 — CORRIGIDO e commitado (commit ba222b8)
+
+- **Causa:** `bars_for_screen` em `main.py` replicava a `pd.Series` de closes em `open`, `high`, `low` e `close` → `high == low` → `ATR = 0` → screener rejeitava todos os pares por vol mínima insuficiente
+- **Fix:** nova função `get_ohlc(symbol, n_bars=200)` em `main.py`:
+  - Com MT5: `copy_rates_from_pos(TIMEFRAME_H1)` → DataFrame OHLC real com high≠low
+  - Fallback paper trading: OHLC sintético com ruído diferenciado por coluna, cobre todos os símbolos demo (incl. XAUUSD+)
+- **`bars_for_screen` refatorado:** resolve símbolo MT5 via `_screen_sym_map` antes de chamar `get_ohlc` (ex: XAUUSD → XAUUSD+)
+- Validado: 38/38 testes mock (5 cenários, 4 símbolos)
+
+Todos os 4 bugs da sessão live XAUUSD+ corrigidos. Próxima subfase: **Sprint 2.5** Cent Account → **Sprint 3.1** TickCollector asyncio.
 
 ### Hotfix — order_manager.py (commit d50713f — 2026-09-09)
 
