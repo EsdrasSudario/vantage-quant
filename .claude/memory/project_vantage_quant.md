@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T12:55:32.408Z
+  modified: 2026-09-09T13:37:11.866Z
 ---
 
 # Vantage Quant System
@@ -49,8 +49,9 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 |---------|-----------|--------|--------|
 | 2.1 | PairScreener algorítmico (`signals/pair_screener.py`) | ✅ feito | 4d433dd |
 | 2.2 | sync_closed_positions() — fix bug posição zumbi SL/TP | ✅ feito | 3fbb1c6 |
+| 2.3 | sync_startup_positions() — restaura posições no startup | ✅ feito | f76706c |
 
-**Sprint 2.2 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
+**Sprint 2.3 concluído.** Próxima subfase: **2.5** — Migrar testes para Cent Account real ($50) — ação manual do usuário. Após isso: **Sprint 3.1** TickCollector asyncio.
 
 ### Detalhes do PairScreener (Sprint 2.1)
 
@@ -68,6 +69,13 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 - **trade_mode=DISABLED (0)** em todos os símbolos testados em 2026-09-04 — retcode 10017
 - Filling mode aceito: IOC (filling_mode=2) para todos os símbolos
 - Causa provável: restrição de horário ou conta demo expirada — não é bug de código
+
+### Sync de startup — posições MT5 restauradas no boot (Sprint 2.3)
+- **Problema:** ao reiniciar o processo com posições vivas no terminal, `open_positions` e `risk.positions` começavam vazios — RiskEngine subestimava exposição real, podendo abrir além do `max_open_positions`
+- **Fix:** `sync_startup_positions()` em `main.py` (linha 131) — chama `mt5.positions_get()` uma vez no startup, popula `open_positions` e `risk.positions` com dados reais (volume, entry_price, direction, ticket, current_pnl, open_time)
+- Resolve sufixo `+` via `rev_map` (ex: EURUSD+ → EURUSD), filtra símbolos fora do universo, suporta filtro por `magic` (padrão 0 = todos)
+- Chamada em `run()` logo após warm-up GARCH/Kalman, antes do `while`
+- Validado: 27/27 testes unitários (mock MT5), incluindo circuit breaker de `max_open_positions` funcionando imediatamente após sync — commit f76706c
 
 ### Bug crítico corrigido — posição zumbi após SL/TP (Sprint 2.2)
 - **Problema:** quando o MT5 fechava uma posição por SL/TP, `open_positions[sym]` permanecia no estado interno, travando novas ordens no símbolo para sempre
