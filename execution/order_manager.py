@@ -203,8 +203,8 @@ class OrderManager:
             "sl":        sl,
             "tp":        tp,
             "deviation": 10,
-            "magic":     20260831,
-            "comment":   "vantage_quant_v1",
+            "magic":     09092026,
+            "comment":   "vantage_quant_v2",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
@@ -293,8 +293,8 @@ class OrderManager:
             "position":     pos.ticket,
             "price":        price,
             "deviation":    10,
-            "magic":        20260831,
-            "comment":      "close_vantage_quant",
+            "magic":        09092026,
+            "comment":      "close_vantage_quant_v2",
             "type_time":    mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
