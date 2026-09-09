@@ -239,9 +239,24 @@ class OrderManager:
         import random
         base_prices = {
             "EURUSD": 1.0850, "GBPUSD": 1.2720, "USDJPY": 148.50,
-            "AUDUSD": 0.6480, "USDCAD": 1.3540, "XAUUSD": 2450.0,
+            "AUDUSD": 0.6480, "NZDUSD": 0.5980, "USDCAD": 1.3540,
+            "USDCHF": 0.8960, "USDCHF+": 0.8960,
+            "EURGBP": 0.8520, "EURGBP+": 0.8520,
+            "XAGUSD": 29.50,
+            "XAUUSD": 2450.0, "XAUUSD+": 2450.0,
         }
-        price    = base_prices.get(symbol, 1.0000)
+        # Tenta preço real via MT5 antes de usar tabela estática
+        if self.mt5_connected:
+            try:
+                tick = mt5.symbol_info_tick(symbol)
+                if tick and tick.ask > 0:
+                    price = (tick.ask + tick.bid) / 2
+                else:
+                    price = base_prices.get(symbol, 1.0000)
+            except Exception:
+                price = base_prices.get(symbol, 1.0000)
+        else:
+            price = base_prices.get(symbol, 1.0000)
         slip     = round(random.uniform(0.1, 1.5), 2)    # 0.1–1.5 pips (RAW ECN)
         filled   = round(price + slip * _pip(symbol) * (1 if direction=="BUY" else -1), 5)
         ticket   = int(time.time() * 1000) % 999999
