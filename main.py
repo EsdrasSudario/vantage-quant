@@ -128,6 +128,52 @@ def get_current_price(symbol: str) -> float:
     return float(prices.iloc[-1])
 
 
+def sync_closed_positions(
+    open_positions: dict,
+    open_stat_arb: dict,
+    risk: "RiskEngine",
+    sym_map: dict,
+) -> None:
+    """Remove de open_positions/open_stat_arb entradas que o MT5 fechou via SL/TP.
+
+    Sem isso, após um SL ou TP ser atingido pelo broker o loop nunca mais abre
+    ordem naquele símbolo porque open_positions[sym] continua existindo.
+    """
+    if not MT5_OK:
+        return
+
+    # Posições diretas
+    for sym in list(open_positions):
+        mt5_sym = sym_map.get(sym, sym)
+        positions_mt5 = mt5.positions_get(symbol=mt5_sym)
+        if positions_mt5 is None or len(positions_mt5) == 0:
+            tick = mt5.symbol_info_tick(mt5_sym)
+            exit_price = (tick.bid + tick.ask) / 2 if tick else 0.0
+            risk.close_position(sym, exit_price)
+            del open_positions[sym]
+            log.info(f"  [SYNC] {sym} fechado pelo MT5 (SL/TP) — removido do estado interno")
+
+    # Legs de stat arb
+    for pair_key in list(open_stat_arb):
+        sym_a, sym_b = pair_key
+        mt5_a = sym_map.get(sym_a, sym_a)
+        mt5_b = sym_map.get(sym_b, sym_b)
+        pos_a = mt5.positions_get(symbol=mt5_a)
+        pos_b = mt5.positions_get(symbol=mt5_b)
+        closed_a = pos_a is None or len(pos_a) == 0
+        closed_b = pos_b is None or len(pos_b) == 0
+        if closed_a or closed_b:
+            for sym, mt5_sym in [(sym_a, mt5_a), (sym_b, mt5_b)]:
+                tick = mt5.symbol_info_tick(mt5_sym)
+                exit_price = (tick.bid + tick.ask) / 2 if tick else 0.0
+                risk.close_position(sym, exit_price)
+            del open_stat_arb[pair_key]
+            log.info(
+                f"  [SYNC] KP {sym_a}/{sym_b} fechado pelo MT5 (SL/TP)"
+                f" — a={closed_a} b={closed_b} — removido do estado interno"
+            )
+
+
 _GEO_RSS_FEEDS = [
     "https://feeds.reuters.com/reuters/businessNews",
     "https://feeds.bbci.co.uk/news/business/rss.xml",
@@ -285,6 +331,9 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
 
         # Restringe ao subconjunto aprovado pelo screener
         screened_map = {s: v for s, v in sym_map.items() if s in active_symbols}
+
+        # Sincroniza posições fechadas pelo MT5 (SL/TP) antes de processar sinais
+        sync_closed_positions(open_positions, open_stat_arb, risk, sym_map)
 
         for sym, mt5_sym in screened_map.items():
             # sym     → chave interna (aggregators, histories, open_positions)
