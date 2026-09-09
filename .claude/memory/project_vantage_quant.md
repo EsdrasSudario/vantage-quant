@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T15:12:38.354Z
+  modified: 2026-09-09T16:08:35.031Z
 ---
 
 # Vantage Quant System
@@ -60,6 +60,11 @@ Swing Intraday — 3–8 trades/dia, TP=40 pips, SL=20 pips, máx. 3 posições 
 - Comment de abertura: `vantage_quant_v1` → `vantage_quant_v2`
 - Comment de fechamento: `close_vantage_quant` → `close_vantage_quant_v2`
 - Aplicado em ambos os blocos de request (abertura linha ~203 e fechamento linha ~293)
+
+### Hotfix — order_manager.py (commit 1482a0d — 2026-09-09)
+
+- Correção de `SyntaxError`: `09092026` → `9092026` nos dois blocos de request
+- Literal com zero à esquerda é inválido em Python 3 (interpretado como octal)
 
 ### Detalhes do PairScreener (Sprint 2.1 + 2.4)
 
