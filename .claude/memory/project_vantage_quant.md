@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 5d56b989-31e8-4684-8189-1154b9881dd0
-  modified: 2026-09-09T18:00:50.529Z
+  modified: 2026-09-10T13:11:52.680Z
 ---
 
 # Vantage Quant System
@@ -95,6 +95,26 @@ Identificados 4 bugs após execução live com 5 iterações no XAUUSD+:
 - Validado: 38/38 testes mock (5 cenários, 4 símbolos)
 
 Todos os 4 bugs da sessão live XAUUSD+ corrigidos. Próxima subfase: **Sprint 2.5** Cent Account → **Sprint 3.1** TickCollector asyncio.
+
+### Sessão XAUUSD+ Live 20 iterações — Novos bugs identificados (2026-09-09, 15:06–15:17 UTC)
+
+Rodada live de 20 iterações (intervalo 30s) revelou 4 novos problemas, distintos dos 4 bugs acima:
+
+| # | Bug | Severidade | Arquivo | Status |
+|---|-----|-----------|---------|--------|
+| 1 | NAV hardcoded $100k → Daily PnL % sempre +0.000% com conta pequena | Crítico | `main.py:334` | ✅ **CORRIGIDO** commit 091f9c8 |
+| 2 | Sinais contrários à posição aberta são descartados sem reversão | Crítico | `main.py:461` | ⏳ pendente |
+| 3 | `load_state` pode restaurar posição já fechada pelo broker (fantasma) | Médio | `risk/risk_engine.py:181` | ⏳ pendente |
+| 4 | Kalman alterna BUY/SELL a cada iteração (conf=0.156 no limiar exato de MIN_CONFIDENCE=0.15) | Conhecido | `signals/kalman_filter.py` | Sem ação — ligado à recalibração Sprint 6.2 |
+
+#### Bug #1 (sessão 20-iter) — CORRIGIDO e commitado (commit 091f9c8 — 2026-09-10)
+
+- **Causa:** `nav = 100_000.0` hardcoded em `main.py:334` independente do modo (live ou paper). Com conta demo real de $98–$118, o cálculo `daily_pnl / nav * 100` sempre arredondava para 0.000% com apenas 3 casas decimais.
+- **Fix:** em modo LIVE (`MT5_OK=True`), carrega `mt5.account_info().balance` como NAV no startup; fallback para $100.000 se `account_info()` retornar `None` ou balance ≤ 0 (ex: paper trading). Log adicional `NAV: $X,XXX.XX` no startup.
+- **Validado:** teste live real de 5 iterações (XAUUSD+, intervalo 15s, 2026-09-10) — NAV carregado corretamente ($118.54), percentuais de Daily PnL agora significativos (-0.452%, -0.240%, -0.531%, -0.664%, -0.782%).
+- **Achado colateral durante o teste:** `[STARTUP SYNC]` restaurou corretamente 1 posição SELL real sobrevivente (@ 4336.69, profit=-6.32) — comportamento correto do sync, não é o Bug #3 fantasma (esse exige posição no JSON que o MT5 **não** confirma).
+
+Próxima ação recomendada: **Bug #2** (reversão de posição) — é o que mais trava a operação, pois sinais contrários são ignorados enquanto há posição aberta, deixando o sistema exposto por tempo indefinido (visto no teste: SELL de -$6.32 acumulando sem fechamento).
 
 ### Hotfix — order_manager.py (commit d50713f — 2026-09-09)
 
