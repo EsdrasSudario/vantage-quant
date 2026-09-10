@@ -331,7 +331,14 @@ def run(symbols: list, interval_sec: int, max_iterations: int):
     log.info("="*60)
 
     # Inicializar componentes
-    nav    = 100_000.0
+    nav = 100_000.0
+    if MT5_OK:
+        acc_info = mt5.account_info()
+        if acc_info is not None and acc_info.balance > 0:
+            nav = float(acc_info.balance)
+        else:
+            log.warning("account_info() indisponível — mantendo NAV fallback $100,000")
+    log.info(f"  NAV      : ${nav:,.2f}")
     limits = RiskLimits(
         max_daily_loss_pct=0.02,
         max_position_loss_pct=0.015,
